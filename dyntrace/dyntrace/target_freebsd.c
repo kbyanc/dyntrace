@@ -23,10 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.4 2004/12/17 21:45:38 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.5 2004/12/18 03:20:45 kbyanc Exp $
  */
 
 #include <sys/types.h>
+#include <sys/sysctl.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -54,6 +55,8 @@ struct target_state {
 };
 
 
+static vm_offset_t stack_top;
+
 static void	 target_region_refresh(target_t targ);
 static void	 freebsd_map_parseline(target_t targ, char *line, uint linenum);
 
@@ -61,6 +64,8 @@ static void	 freebsd_map_parseline(target_t targ, char *line, uint linenum);
 void
 target_init(void)
 {
+	size_t len;
+	int mib[2];
 
 	/*
 	 * FreeBSD always includes ptrace(2) support so we use for as much as
@@ -81,6 +86,15 @@ target_init(void)
 	 */
 	if (!procfs_init())
 		warn("procfs unavailable; region differentiation disabled");
+
+	/*
+	 * Query the top-of-stack address.  We can use this information to
+	 * identify the main process stack in the process's region list.
+	 */
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_USRSTACK;
+	len = sizeof(stack_top);
+	sysctl(mib, 2, &stack_top, &len, NULL, 0);
 }
 
 
@@ -116,10 +130,6 @@ target_execvp(const char *path, char * const argv[])
 	if (targ->procname == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-	/*
-	 * XXX should be updated whenever the pc is in an unknown region or
-	 *     the traced process calls exec().
-	 */
 	target_region_refresh(targ);
 
 	return targ;
@@ -154,7 +164,6 @@ target_attach(pid_t pid)
 	if (targ->procname == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-	/* XXX should be updated in realtime */
 	target_region_refresh(targ);
 
 	return targ;
@@ -218,6 +227,7 @@ target_get_region(target_t targ, vm_offset_t addr)
 	if (region != NULL)
 		return region;
 
+	/* XXX Need to implement refreshing when target calls exec. */
 	debug("refreshing region list; addr = 0x%08x", addr);
 
 	target_region_refresh(targ);
@@ -286,10 +296,14 @@ freebsd_map_parseline(target_t targ, char *line, uint linenum)
 	/* type  = args[11]; (e.g. vnode) */
 	/* path  = args[12]; */
 
-	start = strtoll(args[0], NULL, 16);
-	end = strtoll(args[1], NULL, 16);
+	/* We aren't interested in regions that are not executable. */
+	if (strchr(args[5], 'x') == NULL)
+		return;
 
 	readonly = (strchr(args[5], 'w') == NULL);
+
+	start = strtoll(args[0], NULL, 16);
+	end = strtoll(args[1], NULL, 16);
 
 	type= REGION_NONTEXT_UNKNOWN;
 	if (strcmp(args[11], "vnode") == 0) {
@@ -298,6 +312,8 @@ freebsd_map_parseline(target_t targ, char *line, uint linenum)
 		else if (strcmp(args[5], "r-x") == 0)
 			type = REGION_TEXT_LIBRARY;
 	}
+	else if (end == stack_top)
+		type = REGION_STACK;
 
 	region_update(targ->rlist, start, end, type, readonly);
 }
