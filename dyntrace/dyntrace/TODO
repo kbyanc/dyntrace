@@ -1,12 +1,11 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.13 2004/12/23 01:45:19 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.14 2004/12/27 10:36:45 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
  * Use virtualized perfmon counters to track instruction execution time.
 
- * Perl script for grouping instructions.
-   - File for specifying grouping (by mneumonic?).
-   - Option of which memory region(s) to include.
+ * Perl script for combining or filtering trace results based on
+   program(s) or memory region(s).
 
  * Thread support.
    Need to set each new thread to single-step.  Once that is done,
