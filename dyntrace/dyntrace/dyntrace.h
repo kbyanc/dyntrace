@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.2 2004/11/28 10:37:56 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.3 2004/11/29 02:13:44 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -41,15 +41,13 @@
 #define __DECONST(type, var)	((type)(uintptr_t)(const void *)(var))
 
 
-#define	INSTRUCTION_MAXLEN	16
-
-
 struct reg;	/* Defined in <machine/reg.h> */
 
 
 typedef struct ptrace_state *ptstate_t;
 
 
+extern bool	 opt_printzero;
 extern bool	 opt_debug;
 
 #define debug(fmt, ...) do {			\

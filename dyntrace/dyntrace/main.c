@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.2 2004/11/28 10:37:56 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.3 2004/11/29 02:13:44 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -42,14 +42,15 @@ static void usage(const char *msg);
 static void sigchild(int sig);
 
 
-       bool	opt_debug = false;
-static pid_t	opt_pid   = -1;
+       bool	opt_debug	= false;
+static bool	opt_printzero	= false;
+static pid_t	opt_pid		= -1;
 
 
 int
 main(int argc, char *argv[])
 {
-	uint8_t codebuf[INSTRUCTION_MAXLEN];
+	uint8_t codebuf[16];
 	struct reg regs;
 	struct sigaction act;
 	ptstate_t pts;
@@ -63,7 +64,7 @@ main(int argc, char *argv[])
 	if (argc == 1)
 		usage(NULL);
 
-	while ((ch = getopt(argc, argv, "f:p:v")) != -1) {
+	while ((ch = getopt(argc, argv, "f:p:vz")) != -1) {
 		switch ((char)ch) {
 		case 'f':
 			optree_parsefile(optarg);
@@ -82,6 +83,10 @@ main(int argc, char *argv[])
 
 		case 'v':
 			opt_debug = true;
+			break;
+
+		case 'z':
+			opt_printzero = true;
 			break;
 
 		case '?':
@@ -139,8 +144,8 @@ usage(const char *msg)
 	progname = getprogname();
 
 	fatal(EX_USAGE,
-		"usage: %s [-v] [-f opcodefile] command\n"
-		"       %s [-v] [-f opcodefile] -p pid\n",
+		"usage: %s [-vz] [-f opcodefile] command\n"
+		"       %s [-vz] [-f opcodefile] -p pid\n",
 		progname, progname
 	);
 }

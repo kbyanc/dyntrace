@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.3 2004/11/28 10:37:56 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.4 2004/11/29 02:13:44 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -86,29 +86,6 @@ struct bitval {
 
 
 /*!
- * @struct counter
- *
- *	@param	count
- *
- *	@param	cycles_total
- *
- *	@param	cycles_min
- *
- *	@param	cycles_max
- *
- */
-struct counter {
-	uint64_t	 count;
-	uint64_t	 cycles_total;
-	uint		 cycles_min;
-	uint		 cycles_max;
-};
-
-
-struct OpClass;
-
-
-/*!
  * @struct OpTreeNode
  *
  * Data structure representing a single opcode.  This is used as an entry in
@@ -125,7 +102,27 @@ struct OpTreeNode {
 	struct radix_node rn[2];
 	struct bitval	 match; 
 	struct bitval	 mask;
-	struct OpClass	*opclass;
+	enum { OPCODE, PREFIX } type;
+};
+
+
+/*!
+ * @struct counter
+ *
+ *	@param	count
+ *
+ *	@param	cycles_total
+ *
+ *	@param	cycles_min
+ *
+ *	@param	cycles_max
+ *
+ */
+struct counter {
+	uint64_t	 count;
+	uint64_t	 cycles_total;
+	uint		 cycles_min;
+	uint		 cycles_max;
 };
 
 
@@ -156,12 +153,15 @@ typedef uint prefixmask_t;
 struct Prefix {
 	struct OpTreeNode node;
 
-	prefixmask_t	 id;
+	uint8_t		 len;
+	uint8_t		 id;
+	prefixmask_t	 mask;
 	char		*bitmask;
 	char		*detail;
 };
 
 static struct radix_node_head *op_rnh = NULL;
+static struct Prefix prefix_index[MAX_PREFIXES];
 
 static uint prefix_count = 0;
 
@@ -171,36 +171,14 @@ static struct OpTreeNode *optree_lookup(const void *keyptr);
 static int	 optree_print_node(struct radix_node *rn, void *arg);
 
 static void	 opcode_parse(xmlNode *node);
-static void	 opcode_print(const struct OpTreeNode *node, FILE *f);
-static void	 opcode_accept(struct OpTreeNode *node, const uint8_t *pc,
-			       size_t len, uint cycles, prefixmask_t prefixes);
 static void	 opcode_free(struct Opcode **opp);
 
 static void	 prefix_parse(xmlNode *node);
-static void	 prefix_print(const struct OpTreeNode *node, FILE *f);
-static void	 prefix_accept(struct OpTreeNode *node, const uint8_t *pc,
-			       size_t len, uint cycles, prefixmask_t prefixes);
 static void	 prefix_free(struct Prefix **prefixp);
 
 static void	 parse_bitmask(const char *bitstr,
 			       uint32_t *mask, uint32_t *match);
 
-struct OpClass {
-	const char *typename;
-	void (*print)(const struct OpTreeNode *op, FILE *f);
-	void (*accept)(struct OpTreeNode *op, const uint8_t *pc, size_t len,
-		       uint cycles, prefixmask_t prefixes);
-};
-static struct OpClass opcode_class = {
-	"opcode",
-	opcode_print,
-	opcode_accept
-};
-static struct OpClass prefix_class = {
-	"prefix",
-	prefix_print,
-	prefix_accept
-};
 
 
 /*!
@@ -228,33 +206,33 @@ optree_init(void)
 /*!
  * optree_insert() - Add opcode to tree.
  *
- *	@param	op		Pointer to opcode to add to tree.
+ *	@param	node		Pointer to node to add to tree.
  *
  *	@return	Boolean indicating whether or not the opcode was successfully
  *		added to the tree.
  */
 bool
-optree_insert(struct OpTreeNode *op)
+optree_insert(struct OpTreeNode *node)
 {
 	struct radix_node *rn;
-	struct OpTreeNode *xop;
+	struct OpTreeNode *xnode;
 
-	assert(op->opclass != NULL);
-	assert(op->match.len == sizeof(op->match) &&
-	       op->mask.len == sizeof(op->mask));
+	assert(node->match.len == sizeof(node->match) &&
+	       node->mask.len == sizeof(node->mask));
 
-	rn = op_rnh->rnh_addaddr(&op->match, &op->mask, op_rnh, (void *)op);
+	rn = op_rnh->rnh_addaddr(&node->match, &node->mask, op_rnh,
+				 (void *)node);
 	if (rn != NULL)
-		return (true);
+		return true;
 
 	/*
-	 * If we were unable to add the new entry, then another opcode with
+	 * If we were unable to add the new entry, then another node with
 	 * the same bitmask must already exist in the tree.  Find out what
-	 * opcode it is so we can inform the user.
+	 * node it is so we can inform the user.
 	 */
 
-	xop = optree_lookup(&op->match.val);
-	assert (xop != NULL && xop != op);
+	xnode = optree_lookup(&node->match.val);
+	assert (xnode != NULL && xnode != node);
 
 #ifdef XXXX
 //	if (strcmp(xop->mneumonic, op->mneumonic) != 0) {
@@ -263,7 +241,7 @@ optree_insert(struct OpTreeNode *op)
 //	}
 #endif
 
-	return (false);
+	return false;
 }
 
 
@@ -285,7 +263,7 @@ optree_lookup(const void *keyptr)
 	memcpy(&key.val, keyptr, sizeof(key.val));
 
 	op = (struct OpTreeNode *)op_rnh->rnh_lookup(&key, NULL, op_rnh);
-	return (op);
+	return op;
 }
 
 
@@ -293,16 +271,26 @@ int
 optree_print_node(struct radix_node *rn, void *arg)
 {
 	const struct OpTreeNode *node = (struct OpTreeNode *)rn;
+	const struct Opcode *op = (const struct Opcode *)node;
 	FILE *f = arg;
 
-	node->opclass->print(node, f);
-	return (0);
+	if (node->type != OPCODE)
+		return 0;
+
+	if (op->count.count == 0)
+		return 0;
+
+	fprintf(f, "%-32s\t%s\t%ju\n", op->bitmask, op->mneumonic, op->count.count);
+	return 0;
 }
 
 
 void
 optree_output(FILE *f)
 {
+
+	/* XXX First, print prefixes. */
+
 	op_rnh->rnh_walktree(op_rnh, optree_print_node, f);
 }
 
@@ -311,13 +299,53 @@ void
 optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
 {
 	struct OpTreeNode *node;
+	struct Prefix *prefix;
+	struct Opcode *op;
+	struct counter *c;
+	prefixmask_t prefixmask = PREFIXMASK_EMPTY;
+	size_t origlen = len;
 
-	assert(len >= INSTRUCTION_MAXLEN);
+	assert(len >= sizeof(node->match.len));
 
-	node = optree_lookup(pc);
-	assert(node != NULL);
+	/*
+	 * First, build mask of all prefixes before the opcode.
+	 */
+	for (;;) {
+		node = optree_lookup(pc);
+		assert(node != NULL);
+		if (node->type != PREFIX)
+			break;
 
-	node->opclass->accept(node, pc, len, cycles, 0);
+		prefix = (struct Prefix *)node;
+
+		if (len < prefix->len)
+			goto toolong;
+
+		pc += prefix->len;
+		len += prefix->len;
+		prefixmask |= prefix->mask;
+	}
+
+	assert(node->type == OPCODE);
+	op = (struct Opcode *)node;
+
+	if (len < sizeof(node->match.val))
+		goto toolong;
+
+	debug("%s\t(0x%4x, %s)", op->mneumonic, prefixmask, op->bitmask);
+
+	c = &op->count;
+
+	c->count++;
+	c->cycles_total += cycles;
+	if (cycles < c->cycles_min)
+		c->cycles_min = cycles;
+	else if (cycles > c->cycles_max)
+		c->cycles_max = cycles;
+	return;
+
+toolong:
+	warn("encountered instruction longer than %u bytes; skipping", origlen);
 }
 
 
@@ -394,7 +422,7 @@ opcode_parse(xmlNode *node)
 		      XML_GET_LINE(node));
 	}
 
-	op->node.opclass = &opcode_class;
+	op->node.type = OPCODE;
 	op->node.mask.len = sizeof(op->node.mask);
 	op->node.match.len = sizeof(op->node.match);
 
@@ -423,36 +451,6 @@ opcode_free(struct Opcode **opp)
 
 
 void
-opcode_print(const struct OpTreeNode *node, FILE *f)
-{
-	const struct Opcode *op = (const struct Opcode *)node;
-	fprintf(f, "OPCODE %-32s\t%s\t%ju\n", op->bitmask, op->mneumonic, op->count.count);
-}
-
-
-void
-opcode_accept(struct OpTreeNode *node,
-	      const uint8_t *pc __unused, size_t len __unused,
-	      unsigned int cycles, prefixmask_t prefixes)
-{
-	struct Opcode *op = (struct Opcode *)node;
-	struct counter *c;
-
-	debug("%s (0x%x, %s)", op->mneumonic, prefixes, op->bitmask);
-
-	c = &op->count;
-
-	c->count++;
-	c->cycles_total += cycles;
-	if (cycles < c->cycles_min)
-		c->cycles_min = cycles;
-	else if (cycles > c->cycles_max)
-		c->cycles_max = cycles;
-}
-
-
-
-void
 prefix_parse(xmlNode *node)
 {
 	const xmlAttr *attr;
@@ -463,9 +461,7 @@ prefix_parse(xmlNode *node)
 		      MAX_PREFIXES);
 	}
 
-	prefix = calloc(1, sizeof(*prefix));
-	if (prefix == NULL)
-		fatal(EX_OSERR, "malloc: %m");
+	prefix = &prefix_index[prefix_count];
 
 	for (attr = node->properties; attr != NULL; attr = attr->next) {
 		const char *name = attr->name;
@@ -485,7 +481,7 @@ prefix_parse(xmlNode *node)
 		      XML_GET_LINE(node));
 	}
 
-	prefix->node.opclass = &prefix_class;
+	prefix->node.type = PREFIX;
 	prefix->node.mask.len = sizeof(prefix->node.mask);
 	prefix->node.match.len = sizeof(prefix->node.match);
 
@@ -497,7 +493,10 @@ prefix_parse(xmlNode *node)
 		return;
 	}
 
-	prefix->id = 1 << prefix_count++;
+	prefix->len = (strlen(prefix->bitmask) + 7) / 8;
+	prefix->id = prefix_count;
+	prefix->mask = 1 << prefix_count;
+	prefix_count++;
 }
 
 
@@ -507,51 +506,12 @@ prefix_free(struct Prefix **prefixp)
 	struct Prefix *prefix = *prefixp;
 
 	*prefixp = NULL;
-#if 0
-	if (op->bitmask != NULL)
-		free(op->bitmask);
-	if (op->mneumonic != NULL)
-		free(op->mneumonic);
-	if (op->detail != NULL)
-		free(op->detail);
-#endif
-	free(prefix);
+
+	if (prefix->bitmask != NULL)
+		free(prefix->bitmask);
+	if (prefix->detail != NULL)
+		free(prefix->detail);
 }
-
-
-void
-prefix_print(const struct OpTreeNode *node, FILE *f)
-{
-	const struct Prefix *prefix = (const struct Prefix *)node;
-	fprintf(f, "PREFIX %-32s\t%x\n", prefix->bitmask, prefix->id);
-}
-
-
-void
-prefix_accept(struct OpTreeNode *node, const uint8_t *pc, size_t len,
-	      uint cycles, prefixmask_t prefixes)
-{
-	struct Prefix *prefix = (struct Prefix *)node;
-	struct OpTreeNode *n;
-
-	/*
-	 * XXX Assumes all prefixes are single-byte long.
-	 */
-	len--;
-	pc++;
-
-	if (len < sizeof(node->match.val)) {
-		warn("found instruction longer than %d bytes; skipping",
-		     INSTRUCTION_MAXLEN);
-		return;
-	}
-
-	n = optree_lookup(pc);
-	assert(n != NULL);
-
-	n->opclass->accept(n, pc, len, cycles, prefixes | prefix->id);
-}
-
 
 
 void
