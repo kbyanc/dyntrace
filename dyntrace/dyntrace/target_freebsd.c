@@ -23,10 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.5 2004/12/18 03:20:45 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.6 2004/12/19 11:18:27 kbyanc Exp $
  */
 
 #include <sys/types.h>
+#include <sys/event.h>
 #include <sys/sysctl.h>
 
 #include <assert.h>
@@ -56,7 +57,12 @@ struct target_state {
 
 
 static vm_offset_t stack_top;
+static int	 kq;
 
+/* Currently, we only support tracing a single process. */
+static target_t	 tracedproc = NULL;
+
+static target_t	 target_new(pid_t pid, ptstate_t pts, char *procname);
 static void	 target_region_refresh(target_t targ);
 static void	 freebsd_map_parseline(target_t targ, char *line, uint linenum);
 
@@ -66,6 +72,10 @@ target_init(void)
 {
 	size_t len;
 	int mib[2];
+
+	kq = kqueue();
+	if (kq < 0)
+		fatal(EX_OSERR, "kqueue: %m");
 
 	/*
 	 * FreeBSD always includes ptrace(2) support so we use for as much as
@@ -105,9 +115,42 @@ target_done(void)
 
 
 target_t
+target_new(pid_t pid, ptstate_t pts, char *procname)
+{
+	struct kevent kev;
+	target_t targ;
+
+	targ = calloc(1, sizeof(*targ));
+	if (targ == NULL)
+		fatal(EX_OSERR, "malloc: %m");
+
+	targ->pid = pid;
+	targ->pts = pts;
+	targ->pfs_map = procfs_map_open(pid);
+	targ->rlist = region_list_new();
+	targ->procname = procname;
+
+	assert(tracedproc == NULL);
+	tracedproc = targ;
+
+	target_region_refresh(targ);
+
+	/*
+	 * Request notification whenever the process executes a new image.
+	 * This is necessary so we can flush the region cache.
+	 */
+	EV_SET(&kev, pid, EVFILT_PROC, EV_ADD, NOTE_EXEC, 0, targ);
+	if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0)
+		fatal(EX_OSERR, "kevent: %m");
+
+	return targ;
+}
+
+
+target_t
 target_execvp(const char *path, char * const argv[])
 {
-	target_t targ;
+	char *procname;
 	ptstate_t pts;
 	pid_t pid;
 
@@ -118,64 +161,46 @@ target_execvp(const char *path, char * const argv[])
 		fatal(EX_OSERR, "failed to execute \"%s\": %m", path);
 	}
 
-	targ = calloc(1, sizeof(*targ));
-	if (targ == NULL)
+	procname = strdup(basename(path));
+	if (procname == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-	targ->pid = pid;
-	targ->pts = pts;
-	targ->pfs_map = procfs_map_open(pid);
-	targ->rlist = region_list_new();
-	targ->procname = strdup(basename(path));
-	if (targ->procname == NULL)
-		fatal(EX_OSERR, "malloc: %m");
-
-	target_region_refresh(targ);
-
-	return targ;
+	return target_new(pid, pts, procname);
 }
 
 
 target_t
 target_attach(pid_t pid)
 {
-	target_t targ;
+	char *procname;
 	ptstate_t pts;
 
 	pts = ptrace_attach(pid);
 
-	targ = calloc(1, sizeof(*targ));
-	if (targ == NULL)
-		fatal(EX_OSERR, "malloc: %m");
-
-	targ->pid = pid;
-	targ->pts = pts;
-	targ->pfs_map = procfs_map_open(pid);
-	targ->rlist = region_list_new();
-	targ->procname = procfs_get_procname(pid);
-
 	/*
-	 * If we couldn't get the process name via procfs, fall back to using
-	 * the pid as the process name.
+	 * Try to use procfs to get the process name.  Failing that, fall back
+	 * to using the pid as the process name.
 	 */
-	if (targ->procname == NULL)
-		asprintf(&targ->procname, "%u", pid);
-
-	if (targ->procname == NULL)
+	procname = procfs_get_procname(pid);
+	if (procname == NULL)
+		asprintf(&procname, "%u", pid);
+	if (procname == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-	target_region_refresh(targ);
-
-	return targ;
+	return target_new(pid, pts, procname);
 }
 
 
 void
 target_detach(target_t *targp)
 {
+	struct kevent kev;
 	target_t targ = *targp;
 
 	*targp = NULL;
+
+	EV_SET(&kev, targ->pid, EVFILT_PROC, EV_DELETE, NOTE_EXEC, 0, NULL);
+	kevent(kq, &kev, 1, NULL, 0, NULL);	/* Not fatal if fails. */
 
 	ptrace_detach(targ->pts);
 	ptrace_done(&targ->pts);
@@ -184,13 +209,58 @@ target_detach(target_t *targp)
 
 	free(targ->procname);
 	free(targ);
+
+	tracedproc = NULL;
 }
 
 
-bool
+target_t
+target_wait(void)
+{
+	static struct kevent events[1];
+	static int nevents = 0;
+	static struct kevent *kevp;
+	static const struct timespec timeout = {0, 0};
+	target_t targ;
+
+	if (nevents == 0) {
+		nevents = kevent(kq, NULL, 0, events, 1, &timeout);
+		if (nevents < 0)
+			fatal(EX_OSERR, "kevent: %m");
+		kevp = events;
+	}
+
+	if (nevents > 0) {
+		assert(kevp->filter == EVFILT_PROC);
+
+		targ = kevp->udata;
+		assert(targ == tracedproc);
+
+		if ((kevp->fflags & NOTE_EXEC) != 0) {
+			/*
+			 * The traced process loaded a new process image so
+			 * we need to invalidate the cache of the old image.
+			 * Note that it is critical that we completely free
+			 * the old region list and build a fresh one; just
+			 * calling target_region_refresh() is not enough.
+			 */
+			region_list_done(&targ->rlist);
+			targ->rlist = region_list_new();
+			target_region_refresh(targ);
+		}
+
+		kevp++;
+		nevents--;
+	}
+
+	return ptrace_wait(tracedproc->pts) ? tracedproc : NULL;
+}
+
+
+void
 target_step(target_t targ)
 {
-	return ptrace_step(targ->pts);
+	ptrace_step(targ->pts);
 }
 
 
@@ -227,7 +297,6 @@ target_get_region(target_t targ, vm_offset_t addr)
 	if (region != NULL)
 		return region;
 
-	/* XXX Need to implement refreshing when target calls exec. */
 	debug("refreshing region list; addr = 0x%08x", addr);
 
 	target_region_refresh(targ);
