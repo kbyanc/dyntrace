@@ -1,4 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.7 2004/12/17 04:40:07 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.8 2004/12/18 01:20:36 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
@@ -11,6 +11,8 @@ $kbyanc: dyntrace/dyntrace/TODO,v 1.7 2004/12/17 04:40:07 kbyanc Exp $
  * Thread support.
    Need to set each new thread to single-step.  Once that is done,
    existing logic to handle maintaining single-step status.
+   - Implement proc_service interface; use libbfd for symbol lookups.
+     FreeBSD 5's libthread_db provides for single-stepping threads.
 
  * Ability to diffentiate between types of memory regions.
    Three regions: CODE(program, library), STACK, HEAP.
