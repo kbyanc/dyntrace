@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.8 2004/12/17 07:05:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.9 2004/12/17 21:45:38 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -59,7 +59,6 @@ typedef enum {
 typedef struct region_info *region_t;
 typedef struct region_list *region_list_t;
 
-extern region_t	 region_unknown;
 
 extern bool	 opt_debug;
 extern bool	 opt_printzero;
@@ -84,7 +83,7 @@ extern region_list_t
 		 region_list_new(void);
 extern void	 region_list_done(region_list_t *rlistp);
 
-extern region_t	 region_lookup(region_list_t rlist, vm_offset_t offset);
+extern region_t	 region_lookup(region_list_t rlist, vm_offset_t addr);
 extern void	 region_update(region_list_t rlist,
 			       vm_offset_t start, vm_offset_t end,
 			       region_type_t type, bool readonly);

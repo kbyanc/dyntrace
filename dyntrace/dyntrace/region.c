@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.5 2004/12/17 10:57:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.6 2004/12/17 21:45:38 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -60,25 +60,13 @@ struct region_info {
 	size_t		 bufsize;	/* Memory allocated to buffer. */
 };
 
-struct region_info region_unknown_data = {
-	{ NULL, NULL },
-	.start	  = 0,
-	.end	  = -1,
-	.type	  = REGION_UNKNOWN,
-	.readonly = false,
-	.bufaddr  = 0,
-	.buflen   = 0,
-	.buffer   = NULL,
-	.bufsize  = 0
-};
-region_t region_unknown = &region_unknown_data;
-
 
 struct region_list {
 	LIST_HEAD(, region_info) head;	/* List of regions. */
 };
 
 
+static region_t	 region_find(region_list_t rlist, vm_offset_t addr);
 static void	 region_remove(region_t *regionp);
 
 
@@ -114,19 +102,27 @@ region_list_done(region_list_t *rlistp)
 
 
 region_t
-region_lookup(region_list_t rlist, vm_offset_t offset)
+region_find(region_list_t rlist, vm_offset_t addr)
 {
 	region_t region;
 
 	LIST_FOREACH(region, &rlist->head, link) {		
-		if (region->start <= offset && region->end > offset)
-			break;
+		if (region->start <= addr && region->end > addr)
+			return region;
 	}
 
-	if (region == NULL)
-		return region_unknown;
+	return NULL;
+}
 
-	if (region == LIST_FIRST(&rlist->head))
+
+region_t
+region_lookup(region_list_t rlist, vm_offset_t addr)
+{
+	region_t region;
+
+	region = region_find(rlist, addr);
+
+	if (region == LIST_FIRST(&rlist->head) || region == NULL)
 		return region;
 
 	/*
@@ -168,7 +164,7 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 	 * of the old region in the list so it will effectively "block" it.
 	 * This isn't ideal, but works as a time versus memory tradeoff.
 	 */
-	while ((region = region_lookup(rlist, start)) != region_unknown) {
+	while ((region = region_find(rlist, start)) != NULL) {
 
 		/*
 		 * If the new region exactly matches or is an extension of an
@@ -187,7 +183,7 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 		region_remove(&region);
 	}
 
-	assert(region == region_unknown);
+	assert(region == NULL);
 
 	/*
 	 * Create a new region record and add it to the head of the list.

@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.3 2004/12/17 10:57:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.4 2004/12/17 21:45:38 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -54,7 +54,7 @@ struct target_state {
 };
 
 
-static void	 freebsd_map_parse(target_t targ);
+static void	 target_region_refresh(target_t targ);
 static void	 freebsd_map_parseline(target_t targ, char *line, uint linenum);
 
 
@@ -120,7 +120,7 @@ target_execvp(const char *path, char * const argv[])
 	 * XXX should be updated whenever the pc is in an unknown region or
 	 *     the traced process calls exec().
 	 */
-	freebsd_map_parse(targ);
+	target_region_refresh(targ);
 
 	return targ;
 }
@@ -155,7 +155,7 @@ target_attach(pid_t pid)
 		fatal(EX_OSERR, "malloc: %m");
 
 	/* XXX should be updated in realtime */
-	freebsd_map_parse(targ);
+	target_region_refresh(targ);
 
 	return targ;
 }
@@ -212,20 +212,33 @@ target_get_name(target_t targ)
 region_t
 target_get_region(target_t targ, vm_offset_t addr)
 {
-	return region_lookup(targ->rlist, addr);
+	region_t region;
+
+	region = region_lookup(targ->rlist, addr);
+	if (region != NULL)
+		return region;
+
+	debug("refreshing region list; addr = 0x%08x", addr);
+
+	target_region_refresh(targ);
+	region = region_lookup(targ->rlist, addr);
+	assert(region != NULL);
+	return region;
 }
 
 
 void
-freebsd_map_parse(target_t targ)
+target_region_refresh(target_t targ)
 {
 	char *pos, *endl;
 	char *mapbuf;
 	size_t maplen;
 	uint linenum;
 
-	if (targ->pfs_map < 0)
+	if (targ->pfs_map < 0) {
+		region_update(targ->rlist, 0, -1, REGION_UNKNOWN, false);
 		return;
+	}
 
 	procfs_map_read(targ->pfs_map, &mapbuf, &maplen);
 	assert(mapbuf != NULL);
