@@ -1,27 +1,28 @@
 <!--
 	DTD describing output of dyntrace utility.
 
-	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.2 2004/12/23 01:45:18 kbyanc Exp $
+	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.3 2004/12/27 10:31:36 kbyanc Exp $
   -->
 
 <!ELEMENT dyntrace	(prefix*, region+)>
 <!ELEMENT prefix	EMPTY>
-<!ELEMENT region	(op*)>
-<!ELEMENT op		(count+)>
+<!ELEMENT program	(region+)>
+<!ELEMENT region	(opcount*)>
 
 <!ATTLIST prefix	id		CDATA #REQUIRED>
 <!ATTLIST prefix	bitmask		CDATA #REQUIRED>
 <!ATTLIST prefix	detail		CDATA #REQUIRED>
 
+<!ATTLIST program	name		CDATA #REQUIRED>
+
 <!ATTLIST region	type		CDATA #REQUIRED>
 
-<!ATTLIST op		bitmask		CDATA #REQUIRED>
-<!ATTLIST op		mneumonic	CDATA #REQUIRED>
-<!ATTLIST op		detail		CDATA #IMPLIED>
-
-<!ATTLIST count		prefixes	CDATA #REQUIRED>
-<!ATTLIST count		n		CDATA #REQUIRED>
-<!ATTLIST count		cycles		CDATA #IMPLIED>
-<!ATTLIST count		min		CDATA #IMPLIED>
-<!ATTLIST count		max		CDATA #IMPLIED>
+<!ATTLIST opcount	bitmask		CDATA #REQUIRED>
+<!ATTLIST opcount	mnemonic	CDATA #REQUIRED>
+<!ATTLIST opcount	detail		CDATA #IMPLIED>
+<!ATTLIST opcount	prefixes	CDATA #IMPLIED>
+<!ATTLIST opcount	n		CDATA #REQUIRED>
+<!ATTLIST opcount	cycles		CDATA #IMPLIED>
+<!ATTLIST opcount	min		CDATA #IMPLIED>
+<!ATTLIST opcount	max		CDATA #IMPLIED>
 

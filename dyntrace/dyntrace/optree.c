@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.13 2004/12/27 04:32:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.14 2004/12/27 10:31:35 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -163,7 +163,7 @@ struct Opcode {
 	struct counter	*count_end[NUMREGIONTYPES];
 
 	char		*bitmask;
-	char		*mneumonic;
+	char		*mnemonic;
 	char		*detail;
 };
 
@@ -220,7 +220,7 @@ optree_init(void)
 	 */
 	op = opcode_alloc();
 	op->bitmask = strdup("");
-	op->mneumonic = strdup("(unknown)");
+	op->mnemonic = strdup("(unknown)");
 	op->detail = NULL;
 	op->node.match.len = op->node.mask.len = 0;
 	op_rnh->rnh_addaddr(&op->node.match, &op->node.mask, op_rnh,
@@ -263,9 +263,9 @@ optree_insert(struct OpTreeNode *node)
 	assert (xnode != NULL && xnode != node);
 
 #ifdef XXXX
-//	if (strcmp(xop->mneumonic, op->mneumonic) != 0) {
+//	if (strcmp(xop->mnemonic, op->mnemonic) != 0) {
 		warn("opcodes %s and %s have the same bitmask \"%s\"",
-		     op->mneumonic, xop->mneumonic, op->bitmask);
+		     op->mnemonic, xop->mnemonic, op->bitmask);
 //	}
 #endif
 
@@ -446,6 +446,9 @@ optree_output(void)
 		xmlTextWriterEndElement(writer /* prefix */);
 	}
 
+	xmlTextWriterStartElement(writer, "program");
+	xmlTextWriterWriteAttribute(writer, "name", "N/A");	/* XXX */
+
 	/*
 	 * Iterate through the region types, outputting the opcodes in each
 	 * region.
@@ -464,6 +467,7 @@ optree_output(void)
 		xmlTextWriterEndElement(writer /* "region */);
 	}
 
+	xmlTextWriterEndElement(writer /* "program" */);
 	xmlTextWriterEndElement(writer /* "dyntrace" */);
 	xmlTextWriterEndDocument(writer);
 	xmlFreeTextWriter(writer);
@@ -532,28 +536,27 @@ optree_print_node(struct radix_node *rn, void *arg)
 	if (node->type != OPCODE)
 		return 0;
 
-	c = &op->count_head[regiontype];
+	for (c = &op->count_head[regiontype]; c != NULL; c = c->next) {
 
-	/*
-	 * If there is only a single counter for this opcode (the one embedded
-	 * in the Opcode structure) and that counter has a zero count, then
-	 * only output it if the printzero option was specified on the command
-	 * line.
-	 */
-	if (c->n == 0 && c->next == NULL && !opt_printzero)
-		return 0;
+		/*
+		 * Skip counters with zero counts unless the printzero option
+		 * was specified on the command line.
+		 */
+		if (c->n == 0 && !opt_printzero)
+			continue;
 
-	xmlTextWriterStartElement(writer, "op");
-	xmlTextWriterWriteAttribute(writer, "bitmask", op->bitmask);
-	xmlTextWriterWriteAttribute(writer, "mneumonic", op->mneumonic);
-	if (op->detail != NULL)
-		xmlTextWriterWriteAttribute(writer, "detail", op->detail);
+		xmlTextWriterStartElement(writer, "opcount");
+		xmlTextWriterWriteAttribute(writer, "bitmask", op->bitmask);
+		xmlTextWriterWriteAttribute(writer, "mnemonic", op->mnemonic);
+		if (op->detail != NULL) {
+			xmlTextWriterWriteAttribute(writer, "detail",
+						    op->detail);
+		}
 
-	for (; c != NULL; c = c->next) {
-		xmlTextWriterStartElement(writer, "count");
-
-		xmlTextWriterWriteAttribute(writer, "prefixes",
+		if (c->prefixmask != 0) {
+			xmlTextWriterWriteAttribute(writer, "prefixes",
 					    prefix_string(c->prefixmask));
+		}
 
 		snprintf(buffer, sizeof(buffer), "%llu",
 			 (unsigned long long)c->n);
@@ -561,7 +564,7 @@ optree_print_node(struct radix_node *rn, void *arg)
 
 		/* Only output cycle counts if we have them. */
 		if (c->cycles_total == 0) {
-			xmlTextWriterEndElement(writer /* "count" */);
+			xmlTextWriterEndElement(writer /* "opcount" */);
 			continue;
 		}
 
@@ -575,10 +578,8 @@ optree_print_node(struct radix_node *rn, void *arg)
 		snprintf(buffer, sizeof(buffer), "%u", c->cycles_min);
 		xmlTextWriterWriteAttribute(writer, "max", buffer);
 
-		xmlTextWriterEndElement(writer /* "count" */);
+		xmlTextWriterEndElement(writer /* "opcount" */);
 	}
-
-	xmlTextWriterEndElement(writer /* op */);
 
 	return 0;
 }
@@ -636,8 +637,8 @@ opcode_parse(xmlNode *node)
 
 		if (strcmp(name, "bitmask") == 0)
 			op->bitmask = strdup(value);
-		else if (strcmp(name, "mneumonic") == 0)
-			op->mneumonic = strdup(value);
+		else if (strcmp(name, "mnemonic") == 0)
+			op->mnemonic = strdup(value);
 		else if (strcmp(name, "detail") == 0)
 			op->detail = strdup(value);
 	}
@@ -649,8 +650,8 @@ opcode_parse(xmlNode *node)
 		fatal(EX_DATAERR, "bitmask missing at %ld",
 		      XML_GET_LINE(node));
 	}
-	if (op->mneumonic == NULL) {
-		fatal(EX_DATAERR, "mneumonic missing at %ld",
+	if (op->mnemonic == NULL) {
+		fatal(EX_DATAERR, "mnemonic missing at %ld",
 		      XML_GET_LINE(node));
 	}
 
@@ -691,8 +692,8 @@ opcode_free(struct Opcode **opp)
 	*opp = NULL;
 	if (op->bitmask != NULL)
 		free(op->bitmask);
-	if (op->mneumonic != NULL)
-		free(op->mneumonic);
+	if (op->mnemonic != NULL)
+		free(op->mnemonic);
 	if (op->detail != NULL)
 		free(op->detail);
 	free(op);
