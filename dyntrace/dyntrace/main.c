@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.6 2004/12/03 04:31:03 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.7 2004/12/06 01:09:57 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -41,6 +41,8 @@
 
 #include "dynprof.h"
 
+#define	DEFAULT_CHECKPOINT	(15 * 60)	/* 15 minutes */
+
 
 static void	 usage(const char *msg);
 static void	 profile(ptstate_t pts);
@@ -48,12 +50,15 @@ static uint	 rounddiv(uintmax_t a, uintmax_t b);
 static void	 setsighandler(int sig, void (*handler)(int));
 static void	 sig_ignore(int sig);
 static void	 sig_terminate(int sig);
+static void	 sig_checkpoint(int sig);
 
 
 static bool	 terminate	= false;
+static bool	 checkpoint	= false;
 
        bool	 opt_debug	= false;
        bool	 opt_printzero	= false;
+       int	 opt_checkpoint	= -1;
        pid_t	 opt_pid	= -1;
        char	*opt_outfile	= NULL;
        char	*opt_command	= NULL;
@@ -70,8 +75,8 @@ usage(const char *msg)
 	progname = getprogname();
 
 	fatal(EX_USAGE,
-		"usage: %s [-vz] [-f opcodefile] [-o outputfile] command\n"
-		"       %s [-vz] [-f opcodefile] [-o outputfile] -p pid\n",
+"usage: %s [-vz] [-c seconds] [-f opcodefile] [-o outputfile] command\n"
+"       %s [-vz] [-c seconds] [-f opcodefile] [-o outputfile] -p pid\n",
 		progname, progname
 	);
 }
@@ -86,8 +91,16 @@ main(int argc, char *argv[])
 	if (argc == 1)
 		usage(NULL);
 
-	while ((ch = getopt(argc, argv, "f:o:p:vz")) != -1) {
+	while ((ch = getopt(argc, argv, "c:f:o:p:vz")) != -1) {
 		switch ((char)ch) {
+		case 'c':
+			opt_checkpoint = atoi(optarg);
+			if (opt_checkpoint <= 0) {
+				fatal(EX_USAGE, "invalid count for -c: \"%s\"",
+				      optarg);
+			}
+			break;
+
 		case 'f':
 			optree_parsefile(optarg);
 			break;
@@ -125,6 +138,9 @@ main(int argc, char *argv[])
 
 	argv += optind;
 	argc -= optind;
+
+	if (opt_checkpoint == -1)
+		opt_checkpoint = DEFAULT_CHECKPOINT;
 
 	/*
 	 * The traced process receives a SIGTRAP each time it stops under the
@@ -199,6 +215,22 @@ profile(ptstate_t pts)
 	setsighandler(SIGQUIT, sig_terminate);
 	setsighandler(SIGTERM, sig_terminate);
 
+	/*
+	 * Install signal handlers to dump collected data on demand.  This
+	 * is used to implement periodic checkpointing (via SIGALRM) and to
+	 * allow external programs to request updates (via SIGINFO).
+	 */
+	setsighandler(SIGALRM, sig_checkpoint);
+	setsighandler(SIGINFO, sig_checkpoint);
+
+	if (opt_checkpoint == 0)
+		warn("checkpoints disabled");
+	else {
+		alarm(opt_checkpoint);
+		warn("checkpoints every %u seconds",
+		     opt_checkpoint);
+	}
+
 	gettimeofday(&starttime, NULL);
 	seconds = starttime.tv_sec;
 	strftime(timestr, sizeof(timestr), "%c", localtime(&seconds));
@@ -213,6 +245,18 @@ profile(ptstate_t pts)
 		ptrace_read(pts, regs.r_eip, codebuf, sizeof(codebuf));
 		optree_update(codebuf, sizeof(codebuf), 0);
 		instructions++;
+
+		/*
+		 * Periodically record the instruction counters in case
+		 * we get interrupted (e.g. power outage, etc) so at least
+		 * we have something to show for our efforts.
+		 */
+		if (checkpoint) {
+			warn("checkpoint");
+			optree_output();
+			optree_output_open();
+			checkpoint = false;
+		}
 
 		if (terminate || !ptrace_step(pts))
 			break;
@@ -277,3 +321,13 @@ sig_terminate(int sig __unused)
 {
 	terminate = true;
 }
+
+
+void
+sig_checkpoint(int sig)
+{
+	checkpoint = true;
+	if (sig == SIGALRM && opt_checkpoint > 0)
+		alarm(opt_checkpoint);
+}
+

@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.6 2004/12/01 03:29:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.7 2004/12/06 01:09:57 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -31,6 +31,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -168,6 +169,7 @@ static struct radix_node_head *op_rnh = NULL;
 static struct Prefix prefix_index[MAX_PREFIXES];
 static uint	 prefix_count = 0;
 static xmlTextWriterPtr writer = NULL;
+static int	 writer_fd = -1;
 
 
 static void	 optree_init(void);
@@ -376,12 +378,38 @@ toolong:
 void
 optree_output_open(void)
 {
+	xmlOutputBufferPtr out;
 
 	assert(opt_outfile != NULL);
 	assert(writer == NULL);
 
-	writer = xmlNewTextWriterFilename(opt_outfile, 0);
+	/*
+	 * Open the output file for writing.  We keep the output file open
+	 * across multiple calls, overwriting the contents of the file each
+	 * time we are called (e.g. checkpointing).  We only truncate the
+	 * output file when we first open the file, after that the file can
+	 * only get longer each time we write it as we either find new
+	 * instructions or the instruction counts grow.
+	 */
+	if (writer_fd < 0) {
+		writer_fd = open(opt_outfile, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+		if (writer_fd < 0) {
+			fatal(EX_OSERR, "unable to open %s for writing: %m",
+			      opt_outfile);
+		}
+	}
+
+	lseek(writer_fd, 0, SEEK_SET);
+
+	out = xmlOutputBufferCreateFd(writer_fd, NULL);
+	if (out == NULL) {
+		fatal(EX_CANTCREAT, "unable to open %s for writing: %m",
+		      opt_outfile);
+	}
+
+	writer = xmlNewTextWriter(out);
 	if (writer == NULL) {
+		xmlOutputBufferClose(out);
 		fatal(EX_CANTCREAT, "unable to open %s for writing: %m",
 		      opt_outfile);
 	}
@@ -426,6 +454,9 @@ optree_output(void)
 	xmlFreeTextWriter(writer);
 
 	writer = NULL;
+
+	/* Ensure the results are written to disk. */
+	fsync(writer_fd);
 }
 
 
