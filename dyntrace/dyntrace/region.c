@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.3 2004/12/17 05:02:58 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.4 2004/12/17 07:01:49 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -31,6 +31,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sysexits.h>
 
 #include "dynprof.h"
