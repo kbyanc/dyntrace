@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE oplist SYSTEM "oplist.dtd">
-<!-- Automatically generated 2004-10-16 00:00:29 -0700 from ../reference/25366714.pdf -->
+<!-- Automatically generated 2004-12-18 03:25:03 -0800 from ../reference/25366714.pdf -->
 
 <oplist>
     <prefix bitmask="01100111" detail="address size" />
@@ -1666,12 +1666,12 @@
         <arg direction="output" type="reg" />
         <description>Increment by 1</description>
     </op>
-    <op bitmask="1111111x11000" mneumonic="INC" detail="r eg">
+    <op bitmask="1111111x11000" mneumonic="INC" detail="reg">
         <arg direction="input" type="reg" />
         <arg direction="output" type="reg" />
         <description>Increment by 1</description>
     </op>
-    <op bitmask="1111111xxx000" mneumonic="INC" detail="memor y">
+    <op bitmask="1111111xxx000" mneumonic="INC" detail="memory">
         <arg direction="input" type="mem" />
         <arg direction="output" type="mem" />
         <description>Increment by 1</description>
@@ -3217,11 +3217,11 @@
         <arg direction="output" type="reg" />
         <description>Pop a Word from the Stack</description>
     </op>
-    <op bitmask="1000111111000" mneumonic="POP" detail="r egister">
+    <op bitmask="1000111111000" mneumonic="POP" detail="register">
         <arg direction="output" type="reg" />
         <description>Pop a Word from the Stack</description>
     </op>
-    <op bitmask="10001111xx000" mneumonic="POP" detail="memor y">
+    <op bitmask="10001111xx000" mneumonic="POP" detail="memory">
         <arg direction="output" type="mem" />
         <description>Pop a Word from the Stack</description>
     </op>
@@ -3584,7 +3584,7 @@
         <arg direction="input" type="reg" />
         <description>Push Operand onto the Stack</description>
     </op>
-    <op bitmask="11111111xx110" mneumonic="PUSH" detail="m em or y">
+    <op bitmask="11111111xx110" mneumonic="PUSH" detail="memory">
         <arg direction="input" type="mem" />
         <description>Push Operand onto the Stack</description>
     </op>
@@ -4452,15 +4452,15 @@
         <arg direction="input" type="reg" />
         <description>Verify a Segment for Reading</description>
     </op>
-    <op bitmask="0000111100000000xx100" mneumonic="VERR" detail="memor y">
+    <op bitmask="0000111100000000xx100" mneumonic="VERR" detail="memory">
         <arg direction="input" type="mem" />
         <description>Verify a Segment for Reading</description>
     </op>
-    <op bitmask="000011110000000011101" mneumonic="VERW" detail="r egister">
+    <op bitmask="000011110000000011101" mneumonic="VERW" detail="register">
         <arg direction="input" type="reg" />
         <description>Verify a Segment for Writing</description>
     </op>
-    <op bitmask="0000111100000000xx101" mneumonic="VERW" detail="memor y">
+    <op bitmask="0000111100000000xx101" mneumonic="VERW" detail="memory">
         <arg direction="input" type="mem" />
         <description>Verify a Segment for Writing</description>
     </op>
