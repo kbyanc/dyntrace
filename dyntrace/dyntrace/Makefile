@@ -1,4 +1,4 @@
-# $kbyanc: dyntrace/dyntrace/Makefile,v 1.1 2004/11/28 00:58:40 kbyanc Exp $
+# $kbyanc: dyntrace/dyntrace/Makefile,v 1.2 2004/12/14 06:02:26 kbyanc Exp $
 
 PROG=		dynprof
 
@@ -9,7 +9,8 @@ SRCS=		log.c \
 		main.c \
 		optree.c \
 		ptrace.c \
-		radix.c
+		radix.c \
+		region.c
 
 NOMAN=		noman
 

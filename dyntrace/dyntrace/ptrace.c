@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.1 2004/11/28 00:36:25 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.2 2004/12/14 06:02:26 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -241,7 +241,7 @@ ptrace_setregs(ptstate_t pts, const struct reg *regs)
 }
 
 
-void
+size_t
 ptrace_read(ptstate_t pts, vm_offset_t addr, void *dest, size_t len)
 {
 	struct ptrace_io_desc pio;
@@ -249,21 +249,17 @@ ptrace_read(ptstate_t pts, vm_offset_t addr, void *dest, size_t len)
 	assert(pts->status == ATTACHED);
 	assert(sizeof(addr) >= sizeof(void *));
 
-	while (len > 0) {
-		pio.piod_op = PIOD_READ_I;
-		pio.piod_offs = (void *)(uintptr_t)addr;
-		pio.piod_addr = dest;
-		pio.piod_len = len;
+	pio.piod_op = PIOD_READ_I;
+	pio.piod_offs = (void *)(uintptr_t)addr;
+	pio.piod_addr = dest;
+	pio.piod_len = len;
 
-		if (ptrace(PT_IO, pts->pid, (caddr_t)&pio, 0) < 0) {
-			fatal(EX_OSERR, "ptrace(PT_IO, %u, 0x%08x, %u): %m",
-			      pts->pid, addr, len);
-		}
-
-		dest = ((uint8_t *)dest) + pio.piod_len;
-		addr += pio.piod_len;
-		len -= pio.piod_len;
+	if (ptrace(PT_IO, pts->pid, (caddr_t)&pio, 0) < 0) {
+		fatal(EX_OSERR, "ptrace(PT_IO, %u, 0x%08x, %u): %m",
+		      pts->pid, addr, len);
 	}
+
+	return pio.piod_len;
 }
 
 

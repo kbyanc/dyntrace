@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.8 2004/12/08 03:35:23 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.9 2004/12/14 06:02:26 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -289,41 +289,39 @@ optree_lookup(const void *keyptr)
 
 
 void
-optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
+optree_update(struct procinfo *proc, vm_offset_t pc, uint cycles)
 {
 	struct OpTreeNode *node;
 	struct Prefix *prefix;
 	struct Opcode *op;
 	struct counter *c;
+	region_t region;
 	prefixmask_t prefixmask = PREFIXMASK_EMPTY;
-	size_t origlen = len;
+	uint32_t text;
 
-	assert(len >= sizeof(node->match.len));
+	/* Cache the region; a single instruction should never cross regions. */
+	region = region_lookup(proc, pc);
 
 	/*
 	 * First, build mask of all prefixes before the opcode.
 	 */
 	for (;;) {
-		node = optree_lookup(pc);
+		text = 0;
+		region_read(proc, region, pc, &text, sizeof(text));
+
+		node = optree_lookup(&text);
 		assert(node != NULL);
 		if (node->type != PREFIX)
 			break;
 
 		prefix = (struct Prefix *)node;
 
-		if (len < prefix->len)
-			goto toolong;
-
 		pc += prefix->len;
-		len += prefix->len;
 		prefixmask |= prefix->mask;
 	}
 
 	assert(node->type == OPCODE);
 	op = (struct Opcode *)node;
-
-	if (len < sizeof(node->match.val))
-		goto toolong;
 
 	/*
 	 * Locate the counter to update by its prefix mask.
@@ -360,18 +358,12 @@ optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
 	 * at which we found an unknown opcode.
 	 */
 	if (op->node.match.len == 0) {
-		static const uint8_t *prevpc = NULL;
+		static vm_offset_t prevpc = 0;
 		if (pc != prevpc) {
-			warn("unknown opcode at pc %p: 0x%02x%02x%02x%02x",
-			     pc, pc[0], pc[1], pc[2], pc[3]);
+			warn("unknown opcode at pc 0x%08x: 0x%08x", pc, text);
 			prevpc = pc;
 		}
 	}
-
-	return;
-
-toolong:
-	warn("encountered instruction longer than %u bytes; skipping", origlen);
 }
 
 

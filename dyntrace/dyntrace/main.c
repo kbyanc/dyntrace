@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.8 2004/12/08 03:35:23 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.9 2004/12/14 06:02:26 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -45,7 +45,8 @@
 
 
 static void	 usage(const char *msg);
-static void	 profile(ptstate_t pts);
+static struct procinfo *procinfo_new(ptstate_t pts);
+static void	 profile(void);
 static uint	 rounddiv(uint64_t a, uint64_t b);
 static void	 setsighandler(int sig, void (*handler)(int));
 static void	 sig_ignore(int sig);
@@ -59,9 +60,11 @@ static bool	 checkpoint	= false;
        bool	 opt_debug	= false;
        bool	 opt_printzero	= false;
        int	 opt_checkpoint	= -1;
-       pid_t	 opt_pid	= -1;
+static pid_t	 opt_pid	= -1;
        char	*opt_outfile	= NULL;
        char	*opt_command	= NULL;
+
+static struct procinfo *proc	= NULL;
 
 
 void
@@ -174,7 +177,10 @@ main(int argc, char *argv[])
 			asprintf(&opt_outfile, "%s.prof", basename(*argv));
 	}
 
-	profile(pts);
+	proc = procinfo_new(pts);
+	region_insert(proc, 1, 0xffffffff, REGION_UNKNOWN, false);
+
+	profile();
 
 	/*
 	 * If we attached to an already running process (i.e. -p pid command
@@ -193,14 +199,29 @@ main(int argc, char *argv[])
 }
 
 
+struct procinfo *
+procinfo_new(ptstate_t pts)
+{
+	struct procinfo *proc;
+
+	proc = calloc(1, sizeof(*proc));
+	if (proc == NULL)
+		fatal(EX_OSERR, "malloc: %m");
+
+//	proc->pid = pid;
+	proc->pts = pts;
+
+	return proc;
+}
+
+
 void
-profile(ptstate_t pts)
+profile(void)
 {
 	struct timeval starttime, stoptime;
 	char timestr[64];
 	time_t seconds;
 	uint64_t instructions;
-	uint8_t codebuf[16];
 	struct reg regs;
 
 	optree_output_open();
@@ -238,12 +259,11 @@ profile(ptstate_t pts)
 
 	instructions = 0;
 	while (!terminate) {
-		ptrace_getregs(pts, &regs);
+		ptrace_getregs(proc->pts, &regs);
 
 		/* XXX MARK AS STACK(regs.r_esp) if regs.r_ss == regs.r_cs */
 
-		ptrace_read(pts, regs.r_eip, codebuf, sizeof(codebuf));
-		optree_update(codebuf, sizeof(codebuf), 0);
+		optree_update(proc, regs.r_eip, 0);
 		instructions++;
 
 		/*
@@ -258,7 +278,7 @@ profile(ptstate_t pts)
 			checkpoint = false;
 		}
 
-		if (terminate || !ptrace_step(pts))
+		if (terminate || !ptrace_step(proc->pts))
 			break;
 	}
 
