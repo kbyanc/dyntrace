@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $kbyanc: dyntrace/package/make-distfile,v 1.1 2005/02/01 20:56:34 kbyanc Exp $
+# $kbyanc: dyntrace/package/make-distfile,v 1.2 2005/03/02 05:25:57 kbyanc Exp $
 
 PACKAGE=dyntrace
 
@@ -13,6 +13,7 @@ OLDDISTFILE=`ls -1 ${PACKAGE}*.tar.gz | tail -1`
 (
 	cd $WORKDIR
 	cvs -Q checkout -P ${PACKAGE}
+	( cd ${PACKAGE}; make -f Makefile.pkg )
 	find -X . -name CVS | xargs rm -r
 	rm -r ${PACKAGE}/package
 	tar -czf $WORKDIR/$NEWDISTFILE ${PACKAGE}
@@ -31,4 +32,4 @@ else
 	echo "replaced $OLDDISTFILE with $NEWDISTFILE"
 fi
 
-rm -r $WORKDIR
+rm -rf $WORKDIR
