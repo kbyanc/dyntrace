@@ -1,10 +1,17 @@
+#!/bin/sh
+#
+# $kbyanc: dyntrace/tools/oplist-to-html.sh,v 1.3 2005/03/02 04:21:17 kbyanc Exp $
+
+if [ $# -ne 1 ]; then
+	echo "Usage: $0 <oplist-list.xml>"
+	exit 1
+fi
+
+xsltproc --novalid --nonet - $1 << EOF
+
 <!--
 	XSLT stylesheet for producing a simple HTML document from a
 	opcode list XML file.
-
-	e.g.: xsltproc -o oplist.html oplist-to-html.xsl oplist-x86.xml
-
-	$kbyanc: dyntrace/tools/oplist-to-html.sh,v 1.2 2004/12/27 10:33:03 kbyanc Exp $
  -->
 
 <xsl:stylesheet version="1.0"
@@ -65,3 +72,5 @@
 </xsl:template>
 
 </xsl:stylesheet>
+
+EOF

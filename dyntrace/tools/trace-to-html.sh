@@ -1,10 +1,17 @@
+#!/bin/sh
+#
+# $kbyanc: dyntrace/tools/trace-to-html.sh,v 1.4 2005/03/02 04:21:17 kbyanc Exp $
+
+if [ $# -ne 1 ]; then
+	echo "Usage: $0 <program.trace>"
+	exit 1
+fi
+
+xsltproc --novalid --nonet - $1 << EOF
+
 <!--
 	XSLT stylesheet for producing a simple HTML document from a
 	dyntrace results file.
-
-	e.g.: xsltproc -o my-prog.html trace-to-html.xsl my-prog.trace
-
-	$kbyanc: dyntrace/tools/trace-to-html.sh,v 1.3 2004/12/27 10:33:51 kbyanc Exp $
  -->
 
 <xsl:stylesheet version="1.0"
@@ -71,3 +78,5 @@
 </xsl:template>
 
 </xsl:stylesheet>
+
+EOF
