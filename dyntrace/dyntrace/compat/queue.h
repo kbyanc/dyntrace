@@ -28,12 +28,11 @@
  *
  *	@(#)queue.h	8.5 (Berkeley) 8/20/94
  * $FreeBSD: src/sys/sys/queue.h,v 1.58 2004/04/07 04:19:49 imp Exp $
+ * $kbyanc: dyntrace/dyntrace/compat/queue.h,v 1.2 2004/12/14 05:48:12 kbyanc Exp $
  */
 
-#ifndef _SYS_QUEUE_H_
-#define	_SYS_QUEUE_H_
-
-#include <sys/cdefs.h>
+#ifndef _INCLUDE_DYNPROF_QUEUE_H_
+#define	_INCLUDE_DYNPROF_QUEUE_H_
 
 /*
  * This file defines four types of data structures: singly-linked lists,
@@ -100,39 +99,6 @@
  * _REMOVE			+	+	+	+
  *
  */
-#define	QUEUE_MACRO_DEBUG 0
-#if QUEUE_MACRO_DEBUG
-/* Store the last 2 places the queue element or head was altered */
-struct qm_trace {
-	char * lastfile;
-	int lastline;
-	char * prevfile;
-	int prevline;
-};
-
-#define	TRACEBUF	struct qm_trace trace;
-#define	TRASHIT(x)	do {(x) = (void *)-1;} while (0)
-
-#define	QMD_TRACE_HEAD(head) do {					\
-	(head)->trace.prevline = (head)->trace.lastline;		\
-	(head)->trace.prevfile = (head)->trace.lastfile;		\
-	(head)->trace.lastline = __LINE__;				\
-	(head)->trace.lastfile = __FILE__;				\
-} while (0)
-
-#define	QMD_TRACE_ELEM(elem) do {					\
-	(elem)->trace.prevline = (elem)->trace.lastline;		\
-	(elem)->trace.prevfile = (elem)->trace.lastfile;		\
-	(elem)->trace.lastline = __LINE__;				\
-	(elem)->trace.lastfile = __FILE__;				\
-} while (0)
-
-#else
-#define	QMD_TRACE_ELEM(elem)
-#define	QMD_TRACE_HEAD(head)
-#define	TRACEBUF
-#define	TRASHIT(x)
-#endif	/* QUEUE_MACRO_DEBUG */
 
 /*
  * Singly-linked List declarations.
@@ -381,7 +347,6 @@ struct {								\
 struct name {								\
 	struct type *tqh_first;	/* first element */			\
 	struct type **tqh_last;	/* addr of last next element */		\
-	TRACEBUF							\
 }
 
 #define	TAILQ_HEAD_INITIALIZER(head)					\
@@ -391,7 +356,6 @@ struct name {								\
 struct {								\
 	struct type *tqe_next;	/* next element */			\
 	struct type **tqe_prev;	/* address of previous next element */	\
-	TRACEBUF							\
 }
 
 /*
@@ -403,8 +367,6 @@ struct {								\
 		(head2)->tqh_first->field.tqe_prev = (head1)->tqh_last;	\
 		(head1)->tqh_last = (head2)->tqh_last;			\
 		TAILQ_INIT((head2));					\
-		QMD_TRACE_HEAD(head);					\
-		QMD_TRACE_HEAD(head2);					\
 	}								\
 } while (0)
 
@@ -435,7 +397,6 @@ struct {								\
 #define	TAILQ_INIT(head) do {						\
 	TAILQ_FIRST((head)) = NULL;					\
 	(head)->tqh_last = &TAILQ_FIRST((head));			\
-	QMD_TRACE_HEAD(head);						\
 } while (0)
 
 #define	TAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
@@ -444,12 +405,9 @@ struct {								\
 		    &TAILQ_NEXT((elm), field);				\
 	else {								\
 		(head)->tqh_last = &TAILQ_NEXT((elm), field);		\
-		QMD_TRACE_HEAD(head);					\
 	}								\
 	TAILQ_NEXT((listelm), field) = (elm);				\
 	(elm)->field.tqe_prev = &TAILQ_NEXT((listelm), field);		\
-	QMD_TRACE_ELEM(&(elm)->field);					\
-	QMD_TRACE_ELEM(&listelm->field);				\
 } while (0)
 
 #define	TAILQ_INSERT_BEFORE(listelm, elm, field) do {			\
@@ -457,8 +415,6 @@ struct {								\
 	TAILQ_NEXT((elm), field) = (listelm);				\
 	*(listelm)->field.tqe_prev = (elm);				\
 	(listelm)->field.tqe_prev = &TAILQ_NEXT((elm), field);		\
-	QMD_TRACE_ELEM(&(elm)->field);					\
-	QMD_TRACE_ELEM(&listelm->field);				\
 } while (0)
 
 #define	TAILQ_INSERT_HEAD(head, elm, field) do {			\
@@ -469,8 +425,6 @@ struct {								\
 		(head)->tqh_last = &TAILQ_NEXT((elm), field);		\
 	TAILQ_FIRST((head)) = (elm);					\
 	(elm)->field.tqe_prev = &TAILQ_FIRST((head));			\
-	QMD_TRACE_HEAD(head);						\
-	QMD_TRACE_ELEM(&(elm)->field);					\
 } while (0)
 
 #define	TAILQ_INSERT_TAIL(head, elm, field) do {			\
@@ -478,8 +432,6 @@ struct {								\
 	(elm)->field.tqe_prev = (head)->tqh_last;			\
 	*(head)->tqh_last = (elm);					\
 	(head)->tqh_last = &TAILQ_NEXT((elm), field);			\
-	QMD_TRACE_HEAD(head);						\
-	QMD_TRACE_ELEM(&(elm)->field);					\
 } while (0)
 
 #define	TAILQ_LAST(head, headname)					\
@@ -496,58 +448,9 @@ struct {								\
 		    (elm)->field.tqe_prev;				\
 	else {								\
 		(head)->tqh_last = (elm)->field.tqe_prev;		\
-		QMD_TRACE_HEAD(head);					\
 	}								\
 	*(elm)->field.tqe_prev = TAILQ_NEXT((elm), field);		\
-	TRASHIT((elm)->field.tqe_next);					\
-	TRASHIT((elm)->field.tqe_prev);					\
-	QMD_TRACE_ELEM(&(elm)->field);					\
 } while (0)
 
 
-#ifdef _KERNEL
-
-/*
- * XXX insque() and remque() are an old way of handling certain queues.
- * They bogusly assumes that all queue heads look alike.
- */
-
-struct quehead {
-	struct quehead *qh_link;
-	struct quehead *qh_rlink;
-};
-
-#if defined(__GNUC__) || defined(__INTEL_COMPILER)
-
-static __inline void
-insque(void *a, void *b)
-{
-	struct quehead *element = (struct quehead *)a,
-		 *head = (struct quehead *)b;
-
-	element->qh_link = head->qh_link;
-	element->qh_rlink = head;
-	head->qh_link = element;
-	element->qh_link->qh_rlink = element;
-}
-
-static __inline void
-remque(void *a)
-{
-	struct quehead *element = (struct quehead *)a;
-
-	element->qh_link->qh_rlink = element->qh_rlink;
-	element->qh_rlink->qh_link = element->qh_link;
-	element->qh_rlink = 0;
-}
-
-#else /* !(__GNUC__ || __INTEL_COMPILER) */
-
-void	insque(void *a, void *b);
-void	remque(void *a);
-
-#endif /* __GNUC__ || __INTEL_COMPILER */
-
-#endif /* _KERNEL */
-
-#endif /* !_SYS_QUEUE_H_ */
+#endif /* !_INCLUDE_DYNPROF_QUEUE_H_ */
