@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $kbyanc: dyntrace/tools/extract.pl,v 1.2 2004/09/20 20:08:18 kbyanc Exp $
+# $kbyanc: dyntrace/tools/extract.pl,v 1.3 2004/09/22 01:37:19 kbyanc Exp $
 #
 
 #
@@ -34,6 +34,8 @@
 # Requires graphics/xpdf port (for pdftotext utility) and
 # textproc/p5-XML-Writer port to be installed.
 #
+
+# Here there be dragons.
 
 use strict;
 
@@ -77,12 +79,12 @@ my @sections = (
 		firstpage	=> 347,
 		lastpage	=> 362,
 	},
-#	{
-#		# FP instructions.
-#		group		=> 'FP',
-#		firstpage	=> 363,
-#		lastpage	=> 367,
-#	}
+	{
+		# FP instructions.
+		group		=> 'FP',
+		firstpage	=> 363,
+		lastpage	=> 367,
+	}
 );
 
 
@@ -207,8 +209,8 @@ my @output_only = ('POP', 'SETcc');
 my %input_only_hash = map { $_ => 1 } @input_only;
 my %output_only_hash = map { $_ => 1 } @output_only;
 
-sub ParseOp($$$$) {
-	my ($bitstr, $opcode, $detail, $description) = @_;
+sub ParseOp($$$$$) {
+	my ($bitstr, $opcode, $detail, $description, $group) = @_;
 	my @args_in = ();
 	my @args_out = ();
 	my $conditional;
@@ -216,17 +218,19 @@ sub ParseOp($$$$) {
 	$bitstr = $1 . $bitstr if ($detail =~ s!([01]{3,})$!!o);
 	$detail = '' if ($detail =~ /^$opcode - /);
 
-	# Save the 'original' detail string to include the final output.
-	my $orig_detail = $detail;
-
 	# Do nothing if the bit string contains invalid characters.
 	# These are indicative of a false match while scanning.
 	return if ($bitstr =~ /[=\.]/o);
 
-	# XXXX
-	#
-	#
+	# Save the 'original' detail string to include the final output.
+	my $orig_detail = $detail;
+
+	# Some opcode descriptions list multiple bit strings that only differ
+	# in the order of the operands.  Detect those cases by looking for
+	# opcodes sharing the same opcode and description (both inherited from
+	# the parent header).
 	if (!$detail && $lastop &&
+	    $opcode eq $lastop->{'opcode'} &&
 	    $description eq $lastop->{'description'}) {
 		@args_in = @{$lastop->{'args_out'}};
 		@args_out = @{$lastop->{'args_in'}};
@@ -261,7 +265,7 @@ cleanup_detail:
 	$detail =~ s!\bmmxreg(\d)?!$REG_MMX!go;
 	$detail =~ s!\bxmmreg(\d)?!$REG_XMM!go;
 	$detail =~ s!\bxmmxreg(\d)?!$REG_XMM!go; # Work around typo in doc.
-	$detail =~ s!\bST\((i|\d)\)!$REG_FP!go;
+	$detail =~ s!\bST\(\w\)!$REG_FP!go;
 	$detail =~ s!\breg(ister)?!$REG_GENERAL!go;
 	$detail =~ s!\bmem(ory)?!$MEMADDR!go;
 
@@ -291,6 +295,7 @@ cleanup_detail:
 	$detail =~ s!\bshort!$IMMEDIATE!go;	# e.g. JMP
 	$detail =~ s!\btype!$IMMEDIATE!go;	# e.g. INT n
 	$detail =~ s!\b\d{1,2}-bit level!$IMMEDIATE!go;
+	$detail =~ s!\b\d{1,2}-bit!!go;		# e.g. FICOM
 	$detail =~ s!\W\([[:upper:]]\)!!go if ($opcode eq 'ENTER');
 
 	$detail =~ s!\s+! !go;
@@ -323,7 +328,7 @@ extract_args:
 
 	# Special handling for exchange instructions.
 	if ($opcode =~ /XCHG|XADD/o) {
-		die "unexpected format" unless $detail =~ /\b(.+?)(, | with )(.+?)\b/o;
+		die "unexpected format: $detail" unless $detail =~ /\b(.+?)(, | with )(.+?)\b/o;
 		push @args_in, $1, $3;
 		push @args_out, $1, $3;
 		$detail = '';
@@ -344,6 +349,18 @@ extract_args:
 		push @args_in, $2, $1;
 		push @args_out, $2;
 		$detail = '';
+	}
+
+	# e.g. FADD "ST(0) = ST(0) + mem"
+	if ($detail =~ s!(ST\(\w\)) = (.*) [-+*\/] (.*)!!o) {
+		push @args_out, $1;
+		push @args_in, $2, $3;
+	}
+
+	# e.g. FLDL2T "Load log2(10) into ST(0)"
+	if ($detail =~ s!into (\S+)!!o ||
+	    $description =~ /into (\S+)/o) {
+		push @args_out, $1;
 	}
 
 	# e.g. RET "adding immediate to SP"
@@ -416,9 +433,16 @@ extract_args:
 	}
 
 	# Add any remaining text in the detail as a single argument.
+	#   * Except for special cases handled above, there can never be more
+	#     than a single destination argument.
+	#   * Immediate arguments can never be the destination.
+	#   * The destination of floating-point opcodes is always a register
+	#     in the FP stack unless otherwise specified (handled above).
 	if ($detail !~ /^\s*$/o) {
 		push @args_in, $detail;
-		push @args_out, $detail unless (@args_out || $detail eq $IMMEDIATE);
+		if (!@args_out && $detail ne $IMMEDIATE) {
+			push @args_out, $group eq 'FP' ? $REG_FP : $detail;
+		}
 	}
 
 	foreach my $arg (@args_in, @args_out) {
@@ -461,8 +485,10 @@ cleanup_bitstr:
 }
 
 
-sub Extract($) {
+sub Extract($$) {
 	local (*DATA) = shift;
+	my $group = shift;
+	$group = '' unless $group;
 
 	my $addOK = $FALSE;
 	my $savebits;
@@ -470,7 +496,8 @@ sub Extract($) {
 	my $opcode;
 	my $description;
 
-	while (my $line = <DATA>) {
+	my $line;			# Separate line so 'redo' works.
+	while ($line = <DATA>) {
 		chomp $line;
 
 		my $setop = $FALSE;
@@ -485,6 +512,17 @@ sub Extract($) {
 			next;
 		}
 
+		# Work around error in UD2 bit encoding specification (someone
+		# confused binary and hexadecimal).
+		$line =~ s!\bFFFF\b!1111!go;
+
+		# The Intel PDF uses different characters for hyphens
+		# depending on the section the instruction appears in.
+		# Make them all consistent (it makes the regexes easier too).
+		$line =~ s!\xAD!-!go;		# Used in 'General-Purpose' and FP formats.
+		$line =~ s! -- ! - !go;		# Used in SSE3 formats.
+		$line =~ s!--! - !go;		# Used in SSE formats.
+
 		# Special handling to skip list of prefix bytes.
 		# These appear in the opcode list even though they aren't
 		# actually opcodes.
@@ -496,25 +534,31 @@ sub Extract($) {
 			next;
 		}
 
+		# Special handling to undo munging of the Floating-Point
+		# instruction encoding text from the PDF-to-text conversion.
+		if ($group eq 'FP') {
+			$line =~ s!\xf7!/!go;	# e.g. FIDIV
+			$line =~ s!\xd7!*!go;	# e.g. FIMUL
+			$line =~ s!\xa8! !go;	# e.g. FDIVRP
+			$line =~ s!^\s*([[:upper:]]+)\s([[:upper:]]+)!$1$2!go;
+
+			$line =~ s!^\s*(ST\(\w\))\s+(\w.*) ([-+*\/]) (.*)!$1 = $2 $3 $4!o;
+
+			if ($line !~ / - /o &&
+			    $line =~ /^\s*(F[[:upper:][:digit:]]+)/o) {
+				$line = $1 . ' - ' . $line;
+			}
+		}
+
 reparse:
-		# Work around error in UD2 bit encoding specification (someone
-		# confused binary and hexadecimal).
-		$line =~ s!\bFFFF\b!1111!go;
-
-		# The Intel PDF uses different characters for hyphens
-		# depending on the section the instruction appears in.
-		# Make them all consistent (it makes the regexes easier too).
-		$line =~ s!\xAD!-!go;		# Used in 'General-Purpose' formats.
-		$line =~ s! -- ! - !go;		# Used in SSE3 formats.
-		$line =~ s!--! - !go;		# Used in SSE formats.
-
 		if ($line =~ /^\s*([[:upper:]][\w\s\/]+?) - (\w.*\d{0,1})/o) {
 			($opcode, $description) = ($1, $2);
 
 			$description =~ s!\s+[01]{3,}.*!!o;
 
 			if ($savebits) {
-				ParseOp($savebits, $opcode, '', $description);
+				ParseOp($savebits, $opcode, '', $description,
+					$group);
 				$savebits = undef;
 			}
 
@@ -528,15 +572,32 @@ reparse:
 		    $line =~ /^\s*(\d{1,2}-bit\s+[[:alpha:]].+?)\s+([01]{3,}.*)/o) {
 			my ($bitstring, $detail) = ($2, $1);
 
+			# Hack to parse the F2XM1 instruction; made generic
+			# in case other instances arise in the future.  The
+			# pdf-to-text conversion appears to split lines with
+			# superscripts such that everything after the
+			# superscript appears on a line before the initial
+			# text.  Re-glue the lines back together and insert an
+			# '^' to indicate the original superscript.
+			if (!$opcode) {
+				my $nextline = <DATA>;
+				chomp $nextline;
+				$line =~ s!^\s+!!go;
+				$line = $nextline . '^' . $line;
+				redo;
+			}
+
 			if ($savebits && $lastop) {
 				ParseOp($savebits,
 					$lastop->{'opcode'},
 					$lastop->{'detail'},
-					$lastop->{'description'});
+					$lastop->{'description'},
+					$group);
 				$savebits = undef;
 			}
 
-			ParseOp($bitstring, $opcode, $detail, $description);
+			ParseOp($bitstring, $opcode, $detail, $description,
+				$group);
 			$addOK = $TRUE;
 			next;
 		}
@@ -637,7 +698,7 @@ sub Output {
 		open(DATA, '-|', "$pdftotext -f $first -l $last -layout $source -")
 		    or die;
 
-		Extract(*DATA);
+		Extract(*DATA, $section->{'group'});
 	}
 
 	Output();
