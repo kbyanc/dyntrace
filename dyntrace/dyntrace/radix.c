@@ -28,7 +28,7 @@
  *
  *	@(#)radix.c	8.5 (Berkeley) 5/19/95
  * $FreeBSD: src/sys/net/radix.c,v 1.36 2004/04/21 15:27:36 luigi Exp $
- * $kbyanc: dyntrace/dyntrace/radix.c,v 1.2 2004/10/18 18:40:02 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/radix.c,v 1.3 2004/11/28 00:15:25 kbyanc Exp $
  */
 
 /*
@@ -45,7 +45,7 @@
 #include "dynprof.h"
 #include "radix.h"
 
-#define	log(x, ...)	warn("%s", __VA_ARGS__)
+#define	log(x, ...)	warn(__VA_ARGS__)
 #define	panic(s)	fatal(EX_SOFTWARE, "%s", s);
 #define	min(a,b)	(((a)<(b))?(a):(b))
 
@@ -450,7 +450,7 @@ on1:
 			x = x->rn_right;
 		else
 			x = x->rn_left;
-	} while (b > (unsigned) x->rn_bit);
+	} while ((unsigned)b > (unsigned)x->rn_bit);
 				/* x->rn_bit < b && x->rn_bit >= 0 */
 #ifdef RN_DEBUG
 	if (rn_debug)
