@@ -28,25 +28,26 @@
  *
  *	@(#)radix.c	8.5 (Berkeley) 5/19/95
  * $FreeBSD: src/sys/net/radix.c,v 1.36 2004/04/21 15:27:36 luigi Exp $
+ * $kbyanc: dyntrace/dyntrace/radix.c,v 1.2 2004/10/18 18:40:02 kbyanc Exp $
  */
 
 /*
  * Routines to build and maintain radix trees for routing lookups.
  */
-#ifndef _RADIX_H_
-#include <sys/param.h>
-#ifdef	_KERNEL
-#include <sys/lock.h>
-#include <sys/mutex.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/domain.h>
-#else
-#include <stdlib.h>
-#endif
+
+#include <sys/types.h>
 #include <sys/syslog.h>
-#include <net/radix.h>
-#endif
+
+#include <stdlib.h>
+#include <string.h>
+#include <sysexits.h>
+
+#include "dynprof.h"
+#include "radix.h"
+
+#define	log(x, ...)	warn("%s", __VA_ARGS__)
+#define	panic(s)	fatal(EX_SOFTWARE, "%s", s);
+#define	min(a,b)	(((a)<(b))?(a):(b))
 
 static int	rn_walktree_from(struct radix_node_head *h, void *a, void *m,
 		    walktree_f_t *f, void *w);
@@ -58,7 +59,7 @@ static struct radix_node
 	 *rn_search(void *, struct radix_node *),
 	 *rn_search_m(void *, struct radix_node *, void *);
 
-static int	max_keylen;
+int	max_keylen = 0;
 static struct radix_mask *rn_mkfreelist;
 static struct radix_node_head *mask_rnhead;
 /*
