@@ -22,10 +22,10 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\" 
-.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.1 2004/12/22 09:03:17 kbyanc Exp $
+.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.2 2004/12/22 21:35:38 kbyanc Exp $
 .\"
 .Dd December 12, 2004
-.Dt DYNPROF
+.Dt DYNPROF "" "Dynprof User's Manual"
 .Os
 .Sh NAME
 .Nm dynprof
@@ -85,10 +85,20 @@ A
 .Ar seconds
 value of 0 disables checkpointing; the execution profile will only be recorded
 to the output file when the trace terminates.
+.Pp
+Checkpoints can also be requested interactively by the user by sending the
+.Dv USR1
+or
+.Dv INFO
+signal to the
+.Nm
+process.
+See
+.Xr kill 1 .
 .It Fl f Ar opcodefile
 Specify an alternate file to load descriptions of the hardware instructions
 from.
-See XXXXXX.
+.\" See XXXXXX.
 .It Fl o Ar outputfile
 Specify the trace output file.
 By the default,
@@ -102,6 +112,30 @@ is the name of the process being traced.
 Begin tracing the execution of the indicated process id (only one
 .Fl p
 flag is permitted).
+The trace will start with the next instruction executed by the specified
+process.
+Note that if the specified process is currently performing a system call,
+the trace will not begin until the system call returns which may occur after
+an indeterminate time has elapsed.
+.Pp
+The trace can be terminated by sending
+.Nm
+a
+.Dv HUP , QUIT ,
+or
+.Dv TERM
+signal.
+When
+.Nm
+receives one of these signals it attempts to detach from the traced process
+before exiting, allowing the traced process to continue running untraced.
+However, if the traced process is currently performing a system call, the
+detach may not occur until that system call returns.
+.Pp
+Which processes
+.Nm
+can attach to are determined by the security policy of the host operating
+system.
 .It Ar command ...
 Execute
 .Ar command
@@ -198,8 +232,8 @@ their clones.
 .El
 .Pp
 .Sh EXAMPLES
-# execute and trace the command "df -u"
-.Dl $ dynprof df -u
+# execute and trace the command "df -i"
+.Dl $ dynprof df -i
 .Pp
 # execute and trace the command "javavm -green HelloWorld"
 .Dl $ dynprof javavm -green HelloWorld
@@ -210,6 +244,52 @@ their clones.
 # begin tracing the execution of process id 1024, disable checkpointing
 .Dl $ dynprof -c 0 -p 1024
 .Pp
+.Sh DIAGNOSTICS
+On error,
+.Nm
+exits with one of the exit codes defined in the host operating system's
+.In sysexits.h .
+.Sh COMPATIBILITY
+The
+.Nm
+profiler runs on the following platforms:
+.Bl -tag -width "FreeBSD/i386"
+.It FreeBSD/i386
+Instruction counting and region differentiation are implemented on all versions
+of FreeBSD 4.0 and greater.
+Region differentiation is only available if
+.Xr procfs 5
+is mounted and accessable to the user.
+Instruction timing is implemented on FreeBSD 5.4 and later via the
+.Xr pmc 4
+API.
+The
+.Xr pmc 4
+API is only available if the kernel has been compiled with the
+.Cd PMC_HOOKS
+option and the pmc module is loaded into the kernel.
+.Pp
+Note: versions of FreeBSD released prior to December 12th, 2004 have a
+bug which causes child processes of the traced process to terminate
+immediately after the first executed instruction.
+.Nm
+does not trace the child processes (see
+.Sx BUGS )
+but their premature deaths will presumably alter the flow of control in the
+traced process itself.
+For this reason, it is recommended to use a version of FreeBSD released more
+recently than December 12th, 2004.
+The
+.Nm
+distribution includes a patch that can be applied by the system adminstrator
+to FreeBSD versions 5.0 through 5.3 to correct the bug (patches/trace-fix.diff
+in the
+.Nm
+source distribution).
+.It more to come...
+.\" .It SunOS/sparc
+.\" .It Linux/i686
+.El
 .Sh AUTHORS
 .An "Kelly Yancey"
 .Aq "kbyanc@posi.net" ,
