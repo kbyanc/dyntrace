@@ -1,0 +1,44 @@
+$kbyanc: dyntrace/dyntrace/TODO,v 1.1 2004/11/29 02:16:21 kbyanc Exp $
+
+ * Define output format.
+   Three dimensions: opcode, prefix combination, memory region.
+   Should probably add a flag to indicate whether to include opcodes
+   with zero counts (default to not including them).
+   <prefix id="A" bitmask="..." detail="..." />
+   <region type="CODE">
+	<opcode bitmask="..." mneumonic="ABC" detail="...">
+		<count prefixes="" n="12" ... />
+		<count prefixes="A,C" n="1" ... />
+	</opcode>
+   </region>
+
+ * Add default "unknown" opcode to optree.
+   Both key and mask should be all zeros (match anything).
+
+ * Verify non-contiguous masks are working.
+   (try looking up a bit string that should match an opcode with
+    non-contiguous bitmask)
+
+ ** Send sample output to professor with progress update.
+
+ * FreeBSD kernel modification to virtualize perfmon counters.
+
+ * Use virtualized perfmon counters to track instruction execution time.
+
+ * Perl script for grouping instructions.
+   - File for specifying grouping (by mneumonic?).
+   - Option of which memory region(s) to include.
+
+ * Thread support.
+   Need to set each new thread to single-step.  Once that is done,
+   existing logic to handle maintaining single-step status.
+
+ * Ability to diffentiate between types of memory regions.
+   Three regions: CODE(program, library), STACK, HEAP.
+   Keep separate counters for opcodes in each region.
+   Separate optree per region?
+
+ * Port to linux.
+
+ * Port to Solaris.
+
