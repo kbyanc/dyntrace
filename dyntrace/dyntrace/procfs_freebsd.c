@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.4 2004/12/17 10:57:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.5 2004/12/19 11:00:34 kbyanc Exp $
  */
 
 #include <sys/param.h>
@@ -376,7 +376,7 @@ procfs_map_read(int pmapfd, void *destp, size_t *lenp)
 		if (rv >= 0)
 			break;				/* Successful read. */
 
-		if (rv != EFBIG)
+		if (errno != EFBIG)
 			fatal(EX_OSERR, "read: %m");	/* Unexpected error. */
 
 		buflen <<= 1;
