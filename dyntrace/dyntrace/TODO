@@ -1,4 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.5 2004/12/01 03:29:36 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.6 2004/12/06 01:11:33 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
@@ -20,9 +20,5 @@ $kbyanc: dyntrace/dyntrace/TODO,v 1.5 2004/12/01 03:29:36 kbyanc Exp $
  * Port to linux.
 
  * Port to Solaris.
-
- * Checkpointing.
-   Add option to specify the interval between checkpoints.  Also, install
-   SIGINFO handler which does checkpoint.
 
  * Man page.
