@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $kbyanc: dyntrace/tools/extract.pl,v 1.3 2004/09/22 01:37:19 kbyanc Exp $
+# $kbyanc: dyntrace/tools/extract.pl,v 1.4 2004/10/15 00:30:48 kbyanc Exp $
 #
 
 #
@@ -129,7 +129,7 @@ my @condition_list = (
 my $TRUE  = (1 == 1);
 my $FALSE = (1 == 0);
 
-my @ops = ();
+my %ops = ();
 my $lastop;
 
 
@@ -198,8 +198,20 @@ sub AddOp($) {
 	    '", for opcode ', $op->{'opcode'}, ', stopped'
 	    unless $op->{'bitstr'} =~ /^[01x]+$/o;
 
+	# If two instructions have the same bitstr, then combine their
+	# opcodes into one.  We'll take the best list of the arguments
+	# available (using length of the list to judge which is better).
+	my $existing_op = $ops{$op->{'bitstr'}};
+	if (defined $existing_op) {
+		$op->{'opcode'} .= '/' . $existing_op->{'opcode'};
+		$op->{'args_in'} = $existing_op->{'args_in'}
+		    if $#{$existing_op->{'args_in'}} > $#{$op->{'args_in'}};
+		$op->{'args_out'} = $existing_op->{'args_out'}
+		    if $#{$existing_op->{'args_out'}} > $#{$op->{'args_out'}};
+	}
+
 	$lastop = $op;
-	push @ops, $op;
+	$ops{$op->{'bitstr'}} = $op;
 }
 
 
@@ -649,7 +661,8 @@ sub Output {
 		      ' from ' . $source);
 	$xml->startTag('oplist');
 
-	foreach my $op (@ops) {
+	foreach my $op (sort { $a->{'opcode'} cmp $b->{'opcode'} }
+			values %ops) {
 		my $arg;
 
 		my @opargs;
