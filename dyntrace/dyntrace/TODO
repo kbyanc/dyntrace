@@ -1,4 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.1 2004/11/29 02:16:21 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.2 2004/11/29 02:34:24 kbyanc Exp $
 
  * Define output format.
    Three dimensions: opcode, prefix combination, memory region.
@@ -14,10 +14,6 @@ $kbyanc: dyntrace/dyntrace/TODO,v 1.1 2004/11/29 02:16:21 kbyanc Exp $
 
  * Add default "unknown" opcode to optree.
    Both key and mask should be all zeros (match anything).
-
- * Verify non-contiguous masks are working.
-   (try looking up a bit string that should match an opcode with
-    non-contiguous bitmask)
 
  ** Send sample output to professor with progress update.
 
