@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.4 2004/12/17 07:01:49 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.5 2004/12/17 10:57:44 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -147,7 +147,8 @@ region_remove(region_t *regionp)
 
 	*regionp = NULL;
 	LIST_REMOVE(region, link);
-	/* XXX buffer */
+	if (region->buffer != NULL)
+		free(region->buffer);
 	free(region);
 }
 
@@ -167,7 +168,7 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 	 * of the old region in the list so it will effectively "block" it.
 	 * This isn't ideal, but works as a time versus memory tradeoff.
 	 */
-	while ((region = region_lookup(rlist, start)) != NULL) {
+	while ((region = region_lookup(rlist, start)) != region_unknown) {
 
 		/*
 		 * If the new region exactly matches or is an extension of an
@@ -176,7 +177,6 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 		 */
 		if (region->start == start && region->end <= end &&
 		    region->type == type && region->readonly == readonly) {
-			debug("XXXTEMP extending region 0x%08x", start);
 			region->end = end;
 			return;
 		}
@@ -184,11 +184,10 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 		/*
 		 * Remove any regions that overlap the start address.
 		 */
-		debug("XXXTEMP removing region %0x08x", start);
 		region_remove(&region);
 	}
 
-	assert(region == NULL);
+	assert(region == region_unknown);
 
 	/*
 	 * Create a new region record and add it to the head of the list.
@@ -202,6 +201,7 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 
 	region->start = start;
 	region->end = end;
+	region->type = type;
 	region->readonly = readonly;
 
 	if (!readonly)
@@ -271,16 +271,26 @@ region_read(target_t targ, region_t region, vm_offset_t addr,
 	 * We start the region cache slightly before the requested addr
 	 * so that simple loops do not cause spurious cache misses.
 	 */
-	offset = region->bufsize / 4;
-	start = (addr < (size_t)offset) ? 0 : addr + len - offset;
-	assert(start + region->bufsize >= addr + len);
+	start = region->start;
+	if (start + region->bufsize <= addr)
+		start = region->end - region->bufsize;
+	if (start > addr)
+		start = addr + len - (region->bufsize / 2);
+
+	region->buflen = region->end - start;
+	if (region->buflen > region->bufsize)
+		region->buflen = region->bufsize;
+
+#if 0
+	debug("XXX region cache miss, buflen = %u", region->buflen);
+#endif
 
 	region->buflen = target_read(targ, start, region->buffer,
-				     region->bufsize);
+				     region->buflen);
 	region->bufaddr = start;
 
 	offset = addr - start;
-	assert(offset > 0);
+	assert(offset >= 0);
 
 	memcpy(dest, region->buffer + offset, len);
 	return len;
@@ -300,9 +310,9 @@ region_get_range(region_t region, vm_offset_t *startp, vm_offset_t *endp)
 
 	assert(region != NULL);
 
-	if (*startp != NULL)
+	if (startp != NULL)
 		*startp = region->start;
-	if (*endp != NULL)
+	if (endp != NULL)
 		*endp = region->end;
 
 	return (region->end - region->start);

@@ -23,11 +23,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.2 2004/12/17 07:05:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.3 2004/12/17 10:57:44 kbyanc Exp $
  */
 
 #include <sys/types.h>
 
+#include <assert.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <signal.h>
@@ -52,6 +53,9 @@ struct target_state {
 	char		*procname;
 };
 
+
+static void	 freebsd_map_parse(target_t targ);
+static void	 freebsd_map_parseline(target_t targ, char *line, uint linenum);
 
 
 void
@@ -112,6 +116,12 @@ target_execvp(const char *path, char * const argv[])
 	if (targ->procname == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
+	/*
+	 * XXX should be updated whenever the pc is in an unknown region or
+	 *     the traced process calls exec().
+	 */
+	freebsd_map_parse(targ);
+
 	return targ;
 }
 
@@ -132,10 +142,20 @@ target_attach(pid_t pid)
 	targ->pts = pts;
 	targ->pfs_map = procfs_map_open(pid);
 	targ->rlist = region_list_new();
-//	targ->procname = XXX;
+	targ->procname = procfs_get_procname(pid);
 
+	/*
+	 * If we couldn't get the process name via procfs, fall back to using
+	 * the pid as the process name.
+	 */
 	if (targ->procname == NULL)
 		asprintf(&targ->procname, "%u", pid);
+
+	if (targ->procname == NULL)
+		fatal(EX_OSERR, "malloc: %m");
+
+	/* XXX should be updated in realtime */
+	freebsd_map_parse(targ);
 
 	return targ;
 }
@@ -153,6 +173,7 @@ target_detach(target_t *targp)
 	procfs_map_close(&targ->pfs_map);
 	region_list_done(&targ->rlist);
 
+	free(targ->procname);
 	free(targ);
 }
 
@@ -193,3 +214,78 @@ target_get_region(target_t targ, vm_offset_t addr)
 {
 	return region_lookup(targ->rlist, addr);
 }
+
+
+void
+freebsd_map_parse(target_t targ)
+{
+	char *pos, *endl;
+	char *mapbuf;
+	size_t maplen;
+	uint linenum;
+
+	if (targ->pfs_map < 0)
+		return;
+
+	procfs_map_read(targ->pfs_map, &mapbuf, &maplen);
+	assert(mapbuf != NULL);
+	assert(mapbuf[maplen - 1] == '\n');
+
+	linenum = 0;
+	pos = mapbuf;
+	while (maplen > 0) {
+		endl = memchr(pos, '\n', maplen);
+		if (endl == NULL)
+			break;
+		*endl = '\0';
+
+		freebsd_map_parseline(targ, pos, linenum);
+
+		/* Advance to next line in map output. */
+		linenum++;
+		endl++;
+		maplen -= endl - pos;
+		pos = endl;
+	}
+}
+
+
+void
+freebsd_map_parseline(target_t targ, char *line, uint linenum)
+{
+	char *args[20];
+	vm_offset_t start, end;
+	region_type_t type;
+	bool readonly;
+	int i;
+
+	memset(args, 0, sizeof(args));
+
+	i = 0;
+	while (i < 20 && (args[i] = strsep(&line, " \t")) != NULL) {
+		if (*args[i] != '\0')
+			i++;
+	}
+
+	/* start = args[0]; */
+	/* end   = args[1]; */
+	/* perms = args[5]; (eg. rwx, r-x, ...) */
+	/* type  = args[11]; (e.g. vnode) */
+	/* path  = args[12]; */
+
+	start = strtoll(args[0], NULL, 16);
+	end = strtoll(args[1], NULL, 16);
+
+	readonly = (strchr(args[5], 'w') == NULL);
+
+	type= REGION_NONTEXT_UNKNOWN;
+	if (strcmp(args[11], "vnode") == 0) {
+		if (linenum == 0)
+			type = REGION_TEXT_PROGRAM;
+		else if (strcmp(args[5], "r-x") == 0)
+			type = REGION_TEXT_LIBRARY;
+	}
+
+	region_update(targ->rlist, start, end, type, readonly);
+}
+

@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/procfs.h,v 1.1 2004/12/17 07:05:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs.h,v 1.2 2004/12/17 10:57:44 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_PROCFS_H
@@ -36,6 +36,7 @@
 __BEGIN_DECLS
 
 extern bool	 procfs_init(void);
+
 extern int	 procfs_map_open(pid_t pid);
 extern void	 procfs_map_close(int *pmapfdp);
 extern void	 procfs_map_read(int pmapfd, void *destp, size_t *lenp);
@@ -44,6 +45,11 @@ extern int	 procfs_mem_open(pid_t pid);
 extern void	 procfs_mem_close(int *pmemfdp);
 extern size_t	 procfs_mem_read(int pmemfd, vm_offset_t addr,
 				 void *dest, size_t len);
+
+extern int	 procfs_generic_open(pid_t pid, const char *node);
+extern void	 procfs_generic_close(int *fdp);
+
+extern char	*procfs_get_procname(pid_t pid);
 
 __END_DECLS
 

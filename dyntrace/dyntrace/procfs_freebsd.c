@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.3 2004/12/17 07:05:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.4 2004/12/17 10:57:44 kbyanc Exp $
  */
 
 #include <sys/param.h>
@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <paths.h>
+#include <regex.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,9 +67,6 @@ static int	 procfs_opennode(const char *procfs, pid_t pid,
 static bool	 procfs_mount(const char *path);
 static void	 procfs_unmount(void);
 static void	 procfs_rmtmpdir(void);
-
-static int	 procfs_common_open(pid_t pid, const char *node);
-static void	 procfs_common_close(int *fdp);
 
 
 
@@ -308,7 +306,7 @@ procfs_rmtmpdir(void)
 
 
 int
-procfs_common_open(pid_t pid, const char *node)
+procfs_generic_open(pid_t pid, const char *node)
 {
 
 	assert(pid >= 0);
@@ -324,7 +322,7 @@ procfs_common_open(pid_t pid, const char *node)
 
 
 void
-procfs_common_close(int *fdp)
+procfs_generic_close(int *fdp)
 {
 	int fd = *fdp;
 
@@ -337,14 +335,14 @@ procfs_common_close(int *fdp)
 int
 procfs_map_open(pid_t pid)
 {
-	return procfs_common_open(pid, "map");
+	return procfs_generic_open(pid, "map");
 }
 
 
 void
 procfs_map_close(int *pmapfdp)
 {
-	procfs_common_close(pmapfdp);
+	procfs_generic_close(pmapfdp);
 }
 
 
@@ -373,7 +371,7 @@ procfs_map_read(int pmapfd, void *destp, size_t *lenp)
 	 *     allocate.
 	 */
 	for (;;) {
-		rv = pread(pmapfd, buffer, buflen, 0);
+		rv = pread(pmapfd, buffer, buflen - 1, 0);
 
 		if (rv >= 0)
 			break;				/* Successful read. */
@@ -387,6 +385,7 @@ procfs_map_read(int pmapfd, void *destp, size_t *lenp)
 			fatal(EX_OSERR, "realloc: %m");
 	}
 
+	buffer[rv] = '\0';
 	*dest = buffer;
 	*lenp = rv;
 }
@@ -395,14 +394,14 @@ procfs_map_read(int pmapfd, void *destp, size_t *lenp)
 int
 procfs_mem_open(pid_t pid)
 {
-	return procfs_common_open(pid, "mem");
+	return procfs_generic_open(pid, "mem");
 }
 
 
 void
 procfs_mem_close(int *pmemfdp)
 {
-	procfs_common_close(pmemfdp);
+	procfs_generic_close(pmemfdp);
 }
 
 
@@ -420,3 +419,93 @@ procfs_mem_read(int pmemfd, vm_offset_t addr, void *dest, size_t len)
 	return rv;
 }
 
+
+/*!
+ * procfs_get_procname() - Get the name of the process with the given pid.
+ *
+ *	@param	pid	The process identifier to get the name of.
+ *
+ *	@returns a newly-allocated string containing the name of the process
+ *		 or NULL if the name could not be determined.
+ *
+ *	It is the caller's responsibility to free the returned string when
+ *	it is done with it.
+ */
+char *
+procfs_get_procname(pid_t pid)
+{
+	char buffer[NAME_MAX + 45];
+	regex_t re_postname;
+	regmatch_t re_match;
+	int re_error;
+	ssize_t len;
+	char *pos;
+	int fd;
+
+	/*
+	 * Only /proc/XXX/status has the original process name, unfortunately
+	 * it is difficult to parse correctly.  The /proc/XXX/cmdline file
+	 * seems to be ideal, except that it maybe be altered by the
+	 * process and hence may have non-sensical values (e.g. sendmail which
+	 * changes its name for status reporting).
+	 */
+	fd = procfs_generic_open(pid, "status");
+	if (fd < 0)
+		return NULL;
+
+	/*
+	 * The /proc/XXX/status file is only a single line.  Of that, we only
+	 * need to read the process name (maximum NAME_MAX chars) plus some
+	 * trailing text to identify where the process name ends.
+	 */
+	len = read(fd, buffer, sizeof(buffer) - 1);
+	if (len < 0) {
+		procfs_generic_close(&fd);
+		return NULL;
+	}
+
+	procfs_generic_close(&fd);
+
+	/*
+	 * Now for the trick of parsing the status line.  The format is a
+	 * space-separated list of various fields.  The issue is how to
+	 * accurately identify the process name which itself may have spaces
+	 * embedded in it.  The solution: don't try to find the process name
+	 * but rather the text immediately following the process name.  Once
+	 * we have found that, we know everything before that is the process
+	 * name (spaces and all).
+	 */
+	memset(&re_postname, 0, sizeof(re_postname));
+	re_error = regcomp(&re_postname,
+			   /* my cat 83162 82755 83162 82755 5,8 ctty ... */
+			   /*        ^--------------------------^         */
+			    "( [[:digit:]]{1,5}){4} [[:digit:]]+,[[:digit:]]+ ",
+			    REG_EXTENDED);
+	if (re_error) {
+		regerror(re_error, &re_postname, buffer, sizeof(buffer));
+		fatal(EX_SOFTWARE, "failed to compile regex: %s", buffer);
+	}
+
+	buffer[len] = '\0';
+	re_error = regexec(&re_postname, buffer, 1, &re_match, 0);
+	if (re_error) {
+		regerror(re_error, &re_postname, buffer, sizeof(buffer));
+		fatal(EX_SOFTWARE, "regex match failed: %s", buffer);
+	}
+
+	regfree(&re_postname);
+
+	/*
+	 * Replace the first character matched with a nul-terminator.
+	 * Everything before that is the actual process name.
+	 */
+	pos = buffer + re_match.rm_so;
+	*pos = '\0';
+
+	/*
+	 * Make a copy of the process name to return to the caller.  We don't
+	 * have to change for strdup() returning NULL because if it does it
+	 * just tells our caller we couldn't get the process name.
+	 */
+	return strdup(buffer);
+}
