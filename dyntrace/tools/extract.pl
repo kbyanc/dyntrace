@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $kbyanc: dyntrace/tools/extract.pl,v 1.4 2004/10/15 00:30:48 kbyanc Exp $
+# $kbyanc: dyntrace/tools/extract.pl,v 1.5 2004/10/15 01:39:30 kbyanc Exp $
 #
 
 #
@@ -203,7 +203,15 @@ sub AddOp($) {
 	# available (using length of the list to judge which is better).
 	my $existing_op = $ops{$op->{'bitstr'}};
 	if (defined $existing_op) {
-		$op->{'opcode'} .= '/' . $existing_op->{'opcode'};
+		my %names = map { $_ => 1 } split('/', $existing_op->{'opcode'});
+		$op->{'opcode'} = $existing_op->{'opcode'} . '/' .
+				  $op->{'opcode'}
+		    unless $names{$op->{'opcode'}};
+
+		$op->{'detail'} = $existing_op->{'detail'} . ', ' .
+				  $op->{'detail'}
+		    unless ($op->{'detail'} eq $existing_op->{'detail'});
+
 		$op->{'args_in'} = $existing_op->{'args_in'}
 		    if $#{$existing_op->{'args_in'}} > $#{$op->{'args_in'}};
 		$op->{'args_out'} = $existing_op->{'args_out'}
@@ -661,8 +669,10 @@ sub Output {
 		      ' from ' . $source);
 	$xml->startTag('oplist');
 
-	foreach my $op (sort { $a->{'opcode'} cmp $b->{'opcode'} }
-			values %ops) {
+	foreach my $op (sort {
+				$a->{'opcode'} cmp $b->{'opcode'} or
+				$a->{'bitstr'} cmp $b->{'bitstr'}
+			} values %ops) {
 		my $arg;
 
 		my @opargs;
