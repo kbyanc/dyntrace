@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.11 2004/12/17 05:02:58 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.12 2004/12/18 01:25:22 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -45,13 +45,18 @@
 
 static void	 usage(const char *msg);
 static void	 profile(target_t targ);
+static void	 time_record(const char *msg, struct timeval *tvp);
+static void	 epilogue(void);
 static uint	 rounddiv(uint64_t a, uint64_t b);
 static void	 sig_terminate(int sig);
 static void	 sig_checkpoint(int sig);
 
 
-static bool	 terminate	= false;
-static bool	 checkpoint	= false;
+static struct timeval starttime, stoptime;
+static uint64_t	 instructions	= 0;
+
+static volatile sig_atomic_t terminate	= false;
+static volatile sig_atomic_t checkpoint	= false;
 
        bool	 opt_debug	= false;
        bool	 opt_printzero	= false;
@@ -157,46 +162,6 @@ main(int argc, char *argv[])
 	if (opt_outfile == NULL)
 		asprintf(&opt_outfile, "%s.prof", target_get_name(targ));
 
-	profile(targ);
-
-	/*
-	 * If we attached to an already running process (i.e. -p pid command
-	 * line option was used) and that process has not terminated, then
-	 * detach from it so it can continue running like it was before we
-	 * started tracing it.
-	 *
-	 * However, if the traced process is our child process, do not
-	 * detach from it if it is still running so that it is killed when
-	 * we exit.
-	 */
-	if (terminate && opt_pid > 0)
-		target_detach(&targ);
-
-	target_done();
-
-	return 0;
-}
-
-
-#if 0
-void
-trace_update(target_t targ, vm_offset_t pc, uint n, uint cycles)
-{
-
-	assert(n > 0);
-
-}
-#endif
-
-
-void
-profile(target_t targ)
-{
-	struct timeval starttime, stoptime;
-	char timestr[64];
-	time_t seconds;
-	uint64_t instructions;
-
 	optree_output_open();
 	warn("recording results to %s", opt_outfile);
 
@@ -225,12 +190,38 @@ profile(target_t targ)
 		     opt_checkpoint);
 	}
 
-	gettimeofday(&starttime, NULL);
-	seconds = starttime.tv_sec;
-	strftime(timestr, sizeof(timestr), "%c", localtime(&seconds));
-	debug("profile started at %s", timestr);
+	time_record("profile started at", &starttime);
 
-	instructions = 0;
+	profile(targ);
+
+	time_record("profile stopped at", &stoptime);
+	epilogue();
+
+	optree_output();
+
+	/*
+	 * If we attached to an already running process (i.e. -p pid command
+	 * line option was used) and that process has not terminated, then
+	 * detach from it so it can continue running like it was before we
+	 * started tracing it.
+	 *
+	 * However, if the traced process is our child process, do not
+	 * detach from it if it is still running so that it is killed when
+	 * we exit.
+	 */
+	if (terminate && opt_pid > 0)
+		target_detach(&targ);
+
+	target_done();
+
+	return 0;
+}
+
+
+void
+profile(target_t targ)
+{
+
 	while (!terminate) {
 		vm_offset_t pc = target_get_pc(targ);
 		region_t region = target_get_region(targ, pc);
@@ -253,34 +244,51 @@ profile(target_t targ)
 		if (terminate || !target_step(targ))
 			break;
 	}
+}
 
-	gettimeofday(&stoptime, NULL);
-	seconds = stoptime.tv_sec;
-	strftime(timestr, sizeof(timestr), "%c", localtime(&seconds));
-	debug("profile stopped at %s", timestr);
+
+void
+time_record(const char *msg, struct timeval *tvp)
+{
+	char timestr[64];
+	time_t seconds;
+
+	gettimeofday(tvp, NULL);
+	seconds = tvp->tv_sec;
 
 	if (opt_debug) {
-		uint ips;
+		strftime(timestr, sizeof(timestr), "%c", localtime(&seconds));
+		debug("=== %s %s ===", msg, timestr);
+	}
+}
 
-		stoptime.tv_sec -= starttime.tv_sec;
-		stoptime.tv_usec -= starttime.tv_usec;
-		if (stoptime.tv_usec < 0) {
-			stoptime.tv_usec += 1000000;
-			stoptime.tv_sec--;
-		}
 
-		ips = rounddiv(instructions * 1000000,
-			       (stoptime.tv_sec * 1000) +
-			       rounddiv(stoptime.tv_usec, 1000));
-		debug("%llu instructions profiled in "
-		      "%0lu.%03u seconds (%0u.%03u/sec)",
-		      (unsigned long long)instructions,
-		      stoptime.tv_sec, rounddiv(stoptime.tv_usec, 1000),
-		      ips / 1000, ips % 1000);
+void
+epilogue(void)
+{
+	uint ips;
+
+	if (!opt_debug)
+		return;
+
+	stoptime.tv_sec -= starttime.tv_sec;
+	stoptime.tv_usec -= starttime.tv_usec;
+	if (stoptime.tv_usec < 0) {
+		stoptime.tv_usec += 1000000;
+		stoptime.tv_sec--;
 	}
 
-	optree_output();
+	ips = rounddiv(instructions * 1000000,
+		       (stoptime.tv_sec * 1000) +
+		       rounddiv(stoptime.tv_usec, 1000));
+	debug("%llu instructions profiled in "
+	      "%0lu.%03u seconds (%0u.%03u/sec)",
+	      (unsigned long long)instructions,
+	      stoptime.tv_sec, rounddiv(stoptime.tv_usec, 1000),
+	      ips / 1000, ips % 1000);
 }
+
+
 
 
 uint
