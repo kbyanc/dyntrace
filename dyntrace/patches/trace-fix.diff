@@ -4,13 +4,30 @@ RCS file: /home/ncvs/src/sys/i386/i386/vm_machdep.c,v
 retrieving revision 1.241
 diff -u -p -r1.241 vm_machdep.c
 --- vm_machdep.c	20 Jul 2004 01:38:59 -0000	1.241
-+++ vm_machdep.c	28 Nov 2004 02:12:28 -0000
-@@ -197,7 +197,7 @@ cpu_fork(td1, p2, td2, flags)
- 	bcopy(td1->td_frame, td2->td_frame, sizeof(struct trapframe));
- 
- 	td2->td_frame->tf_eax = 0;		/* Child returns zero */
--	td2->td_frame->tf_eflags &= ~PSL_C;	/* success */
-+	td2->td_frame->tf_eflags &= ~(PSL_C|PSL_T);	/* success */
++++ vm_machdep.c	1 Dec 2004 21:26:32 -0000
+@@ -62,6 +62,7 @@ __FBSDID("$FreeBSD: src/sys/i386/i386/vm
+ #include <sys/malloc.h>
+ #include <sys/mbuf.h>
+ #include <sys/mutex.h>
++#include <sys/pioctl.h>
+ #include <sys/proc.h>
+ #include <sys/sf_buf.h>
+ #include <sys/smp.h>
+@@ -201,6 +202,17 @@ cpu_fork(td1, p2, td2, flags)
  	td2->td_frame->tf_edx = 1;
  
  	/*
++	 * If the parent process has the trap bit set (i.e. a debugger had
++	 * single stepped the process to the system call), we need to clear
++	 * the trap flag from the new frame unless the debugger had set PF_FORK
++	 * on the parent.  Otherwise, the child will receive a (likely
++	 * unexpected) SIGTRAP when it executes the first instruction after
++	 * returning  to userland.
++	 */
++	if ((p1->p_pfsflags & PF_FORK) == 0)
++		td2->td_frame->tf_eflags &= ~PSL_T;
++
++	/*
+ 	 * Set registers for trampoline to user mode.  Leave space for the
+ 	 * return address on stack.  These are the kernel mode register values.
+ 	 */
