@@ -23,15 +23,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.5 2004/11/30 21:04:05 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.6 2004/12/03 04:31:03 kbyanc Exp $
  */
 
 #include <sys/types.h>
+#include <sys/time.h>
 
 #include <libgen.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sysexits.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <machine/reg.h>
@@ -39,24 +42,44 @@
 #include "dynprof.h"
 
 
-static void usage(const char *msg);
-static void setsighandler(int sig, void (*handler)(int));
-static void sig_ignore(int sig);
-static void sig_terminate(int sig);
+static void	 usage(const char *msg);
+static void	 profile(ptstate_t pts);
+static uint	 rounddiv(uintmax_t a, uintmax_t b);
+static void	 setsighandler(int sig, void (*handler)(int));
+static void	 sig_ignore(int sig);
+static void	 sig_terminate(int sig);
 
 
-bool	 terminate	= false;
+static bool	 terminate	= false;
 
-bool	 opt_debug	= false;
-bool	 opt_printzero	= false;
-pid_t	 opt_pid	= -1;
-char	*opt_outfile	= NULL;
+       bool	 opt_debug	= false;
+       bool	 opt_printzero	= false;
+       pid_t	 opt_pid	= -1;
+       char	*opt_outfile	= NULL;
+       char	*opt_command	= NULL;
+
+
+void
+usage(const char *msg)
+{
+	const char *progname;
+
+	if (msg != NULL)
+		warn("%s\n", msg);
+
+	progname = getprogname();
+
+	fatal(EX_USAGE,
+		"usage: %s [-vz] [-f opcodefile] [-o outputfile] command\n"
+		"       %s [-vz] [-f opcodefile] [-o outputfile] -p pid\n",
+		progname, progname
+	);
+}
+
 
 int
 main(int argc, char *argv[])
 {
-	uint8_t codebuf[16];
-	struct reg regs;
 	ptstate_t pts;
 	int ch;
 
@@ -127,43 +150,15 @@ main(int argc, char *argv[])
 		pts = ptrace_fork();
 		if (pts == NULL) {
 			/* Child process. */
-			debug("running %s...", *argv);
-			if (execvp(*argv, argv) < 0) {
-				fatal(EX_OSERR, "failed to executed \"%s\": %m",
-				      *argv);
-			}
-			/* NOTREACHED */
+			execvp(*argv, argv);
+			fatal(EX_OSERR, "failed to executed \"%s\": %m", *argv);
 		}
 
 		if (opt_outfile == NULL)
 			asprintf(&opt_outfile, "%s.prof", basename(*argv));
 	}
 
-	optree_output_open();
-
-	/*
-	 * Install signal handlers to ensure we dump the collected data
-	 * before terminating.
-	 */
-	setsighandler(SIGHUP, sig_terminate);
-	setsighandler(SIGINT, sig_terminate);
-	setsighandler(SIGQUIT, sig_terminate);
-	setsighandler(SIGTERM, sig_terminate);
-
-	while (!terminate) {
-		ptrace_getregs(pts, &regs);
-
-		/* XXX MARK AS STACK(regs.r_esp) if regs.r_ss == regs.r_cs */
-
-		ptrace_read(pts, regs.r_eip, codebuf, sizeof(codebuf));
-		optree_update(codebuf, sizeof(codebuf), 0);
-
-		if (terminate || !ptrace_step(pts))
-			break;
-	}
-
-	optree_output();
-	warn("profile written to %s", opt_outfile);
+	profile(pts);
 
 	/*
 	 * If we attached to an already running process (i.e. -p pid command
@@ -183,20 +178,79 @@ main(int argc, char *argv[])
 
 
 void
-usage(const char *msg)
+profile(ptstate_t pts)
 {
-	const char *progname;
+	struct timeval starttime, stoptime;
+	char timestr[64];
+	time_t seconds;
+	uintmax_t instructions;
+	uint8_t codebuf[16];
+	struct reg regs;
 
-	if (msg != NULL)
-		warn("%s\n", msg);
+	optree_output_open();
+	warn("recording results to %s", opt_outfile);
 
-	progname = getprogname();
+	/*
+	 * Install signal handlers to ensure we dump the collected data
+	 * before terminating.
+	 */
+	setsighandler(SIGHUP, sig_terminate);
+	setsighandler(SIGINT, sig_terminate);
+	setsighandler(SIGQUIT, sig_terminate);
+	setsighandler(SIGTERM, sig_terminate);
 
-	fatal(EX_USAGE,
-		"usage: %s [-vz] [-f opcodefile] [-o outputfile] command\n"
-		"       %s [-vz] [-f opcodefile] [-o outputfile] -p pid\n",
-		progname, progname
-	);
+	gettimeofday(&starttime, NULL);
+	seconds = starttime.tv_sec;
+	strftime(timestr, sizeof(timestr), "%c", localtime(&seconds));
+	debug("profile started at %s", timestr);
+
+	instructions = 0;
+	while (!terminate) {
+		ptrace_getregs(pts, &regs);
+
+		/* XXX MARK AS STACK(regs.r_esp) if regs.r_ss == regs.r_cs */
+
+		ptrace_read(pts, regs.r_eip, codebuf, sizeof(codebuf));
+		optree_update(codebuf, sizeof(codebuf), 0);
+		instructions++;
+
+		if (terminate || !ptrace_step(pts))
+			break;
+	}
+
+	gettimeofday(&stoptime, NULL);
+	seconds = stoptime.tv_sec;
+	strftime(timestr, sizeof(timestr), "%c", localtime(&seconds));
+	debug("profile stopped at %s", timestr);
+
+	if (opt_debug) {
+		uint ips;
+
+		stoptime.tv_sec -= starttime.tv_sec;
+		stoptime.tv_usec -= starttime.tv_usec;
+		if (stoptime.tv_usec < 0) {
+			stoptime.tv_usec += 1000000;
+			stoptime.tv_sec--;
+		}
+
+		ips = rounddiv(instructions * 1000000,
+			       (stoptime.tv_sec * 1000) +
+			       rounddiv(stoptime.tv_usec, 1000));
+		debug("%ju instructions profiled in "
+		      "%0lu.%03u seconds (%0u.%03u/sec)",
+		      instructions,
+		      stoptime.tv_sec, rounddiv(stoptime.tv_usec, 1000),
+		      ips / 1000, ips % 1000);
+	}
+
+	optree_output();
+}
+
+
+uint
+rounddiv(uintmax_t a, uintmax_t b)
+{
+	return (a + (b / 2)) / b;
 }
 
 
