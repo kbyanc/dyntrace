@@ -1,3 +1,3 @@
-# $kbyanc: dyntrace/Makefile.am,v 1.1 2005/03/02 05:14:57 kbyanc Exp $
+# $kbyanc: dyntrace/Makefile.am,v 1.2 2005/03/04 04:46:59 kbyanc Exp $
 
-SUBDIRS=	data tools
+SUBDIRS=	data dyntrace tools
