@@ -1,4 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.9 2004/12/18 02:45:44 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.10 2004/12/18 04:37:15 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
@@ -34,3 +34,18 @@ $kbyanc: dyntrace/dyntrace/TODO,v 1.9 2004/12/18 02:45:44 kbyanc Exp $
    becomes full.  Then we can use the optimization described above to parse
    all of the instructions described by the array.
    - Solaris appears to provide a similar interface in v9/sys/traptrace.h
+
+
+
+ * Investigate:
+   Pentium 4 and Pentium M processors have a "Precise Event-Based Sampling"
+   features (section 15 of the System Programming Guide) which may allow
+   us to collect large numbers of samples without any contexts switches by
+   having the CPU write the samples directly to a memory buffer.  A "Debug Store"
+   is generated when the buffer is near full.
+   The availability of this feature is indicated by bit 21 of the flags
+   returned by CPUID instruction.  Each sample takes 40 bytes of memory
+   and contains the program counter.
+   This will definately require kernel-support as we must program the APIC and
+   implement the Debug Store ISR; we also need to enable/disable the feature on
+   context switch.
