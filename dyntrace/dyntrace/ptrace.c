@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.7 2004/12/23 01:45:19 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.8 2004/12/27 04:31:54 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -58,6 +58,15 @@ static void	 ptrace_sig_ignore(int sig);
 static ptstate_t ptrace_alloc(pid_t pid);
 
 
+/*!
+ * ptrace_signal_name() - Map signal numbers to signal names.
+ *
+ *	@param	sig	The signal number to get the name of.
+ *
+ *	@return pointer to static storage holding the signal name string.
+ *
+ *	The caller must not try to free() the returned pointer.
+ */
 const char *
 ptrace_signal_name(int sig)
 {
@@ -77,6 +86,12 @@ ptrace_signal_name(int sig)
 }
 
 
+/*!
+ * ptrace_init() - Initialize ptrace interface API.
+ *
+ *	Initializes the local data structures used for interfacing with
+ *	the ptrace API.  Installs a SIGCHLD signal handler.
+ */
 void
 ptrace_init(void)
 {
@@ -95,12 +110,29 @@ ptrace_init(void)
 }
 
 
+/*!
+ * ptrace_sig_ignore() - Stub signal handler for ignoring SIGCHLD signals.
+ *
+ *	Installing a stub no-op signal handler is different than using SIG_IGN
+ *	as the action of SIGCHLD.  The former causes the child to stop or
+ *	exit such that we can retreive the child's status with the wait(2)
+ *	system call whereas the latter prevents us from learning the child's
+ *	status altogether.
+ */
 void
 ptrace_sig_ignore(int sig __unused)
 {
 }
 
 
+/*!
+ * ptrace_alloc() - Internal routine to allocate and initialize a ptrace
+ *		    state handle.
+ *
+ *	@param	pid	The process identifer of the process to be traced.
+ *
+ *	@return newly-allocated ptrace state handle.
+ */
 ptstate_t
 ptrace_alloc(pid_t pid)
 {
@@ -118,6 +150,21 @@ ptrace_alloc(pid_t pid)
 }
 
 
+/*!
+ * ptrace_fork() - 
+ *
+ *	Wraps the fork(2) system call with additional logic for attaching to
+ *	the child process for tracing.  As with fork(2), both the parent
+ *	and the child process return; the calling code can distinguish which
+ *	process it the child because it will return NULL whereas the parent
+ *	will return a non-NULL ptrace handle.
+ *
+ *	@param	pidp	Pointer to pid_t to populate with the process
+ *			identifier of the child process.
+ *
+ *	@return	NULL to the child process or ptrace state handle for tracing
+ *		the child process to the parent process.
+ */
 ptstate_t
 ptrace_fork(pid_t *pidp)
 {
@@ -159,6 +206,17 @@ ptrace_fork(pid_t *pidp)
 }
 
 
+/*!
+ * ptrace_attach() - Attach to an existing process for tracing.
+ *
+ *	@param	pid	The process identifier to attach to.
+ *
+ *	@return	ptrace handle for tracing the given process.
+ *
+ *	If the current process does not have sufficient permissions to trace
+ *	the specified target process, an error is logged and the program will
+ *	terminate.
+ */
 ptstate_t
 ptrace_attach(pid_t pid)
 {
@@ -181,19 +239,36 @@ ptrace_attach(pid_t pid)
 }
 
 
+/*!
+ * ptrace_detach() - Stop tracing a process, allowing it to continue running
+ *		     as usual.
+ *
+ *	@param	pts	The ptrace handle for the process to stop tracing.
+ *
+ *	Detaching from a child process may cause it to terminate on some
+ *	platforms.
+ */
 void
 ptrace_detach(ptstate_t pts)
 {
 
 	assert(pts->status == ATTACHED);
 
-	if (ptrace(PT_DETACH, pts->pid, (caddr_t)1, 0) < 0)
+	if (ptrace(PT_DETACH, pts->pid, (caddr_t)1, pts->signum) < 0)
 		warn("failed to detach from %u: %m", pts->pid);
 	pts->status = DETACHED;
 	pts->signum = 0;
 }
 
 
+/*!
+ * ptrace_done() - Free memory allocated to ptrace state handle.
+ *
+ *	@param	ptsp	Pointer to the ptrace state handle to free.
+ *
+ *	@post	The value is ptsp points to is invalidated so it cannot be
+ *		passed to any ptrace_* routine.
+ */
 void
 ptrace_done(ptstate_t *ptsp)
 {
@@ -204,6 +279,17 @@ ptrace_done(ptstate_t *ptsp)
 }
 
 
+/*!
+ * ptrace_step() - Single-step the given process by a single instruction.
+ *
+ *	Allows the process controlled by the given ptrace state handle to
+ *	execute a single instruction before stopping.
+ *
+ *	@param	pts	The ptrace state handle for the process to single-step.
+ *
+ *	@post	The ptrace_wait() routine should be called to wait for the
+ *		process to stop again after executing the instruction.
+ */
 void
 ptrace_step(ptstate_t pts)
 {
@@ -220,6 +306,15 @@ ptrace_step(ptstate_t pts)
 }
 
 
+/*!
+ * ptrace_continue() - Continue the given process' execution.
+ *
+ *	Allows the process controlled by the given ptrace state handle to
+ *	continue execution.  Execution continues until the process receives
+ *	a signal or encounters a breakpoint.
+ *
+ *	@param	pts	The ptrace state handle for the process to unstop.
+ */
 void
 ptrace_continue(ptstate_t pts)
 {
@@ -236,6 +331,16 @@ ptrace_continue(ptstate_t pts)
 }
 
 
+/*!
+ * ptrace_wait() - Wait for a process to stop.
+ *
+ *	Waits for the process controlled by the given state handle to stop.
+ *
+ *	@param	pts	The ptrace state handle for the process to wait for.
+ *
+ *	@return	boolean true if the process has stopped; boolean false if the
+ *		the process has terminated.
+ */
 bool
 ptrace_wait(ptstate_t pts)
 {
@@ -279,6 +384,16 @@ ptrace_wait(ptstate_t pts)
 }
 
 
+/*!
+ * ptrace_signal() - Send a signal to a process.
+ *
+ *	@param	pts	The state handle of the process to signal.
+ *
+ *	@param	signum	The signal number to send to the process.
+ *
+ *	The specified signal is sent to the process when it resumes execution
+ *	either by ptrace_step(), ptrace_continue(), or ptrace_detach().
+ */
 void
 ptrace_signal(ptstate_t pts, int signum)
 {
@@ -290,6 +405,18 @@ ptrace_signal(ptstate_t pts, int signum)
 }
 
 
+/*!
+ * ptrace_getregs() - Get the values in the CPU registers for a process.
+ *
+ *	@param	pts	The state handle of the process to read the register
+ *			values from.
+ *
+ *	@param	regs	Machine-dependent structure to populate with the
+ *			target process' register values.
+ *
+ *	@pre	The process controlled by the given state handle must be
+ *		stopped.
+ */
 void
 ptrace_getregs(ptstate_t pts, struct reg *regs)
 {
@@ -301,6 +428,18 @@ ptrace_getregs(ptstate_t pts, struct reg *regs)
 }
 
 
+/*!
+ * ptrace_setregs() - Set the values of the CPU registers for a process.
+ *
+ *	@param	pts	The state handle of the process to write the register
+ *			values for.
+ *
+ *	@param	regs	Machine-dependent structure to load the target process'
+ *			register values from.
+ *
+ *	@pre	The process controlled by the given state handle must be
+ *		stopped.
+ */
 void
 ptrace_setregs(ptstate_t pts, const struct reg *regs)
 {
@@ -312,6 +451,21 @@ ptrace_setregs(ptstate_t pts, const struct reg *regs)
 }
 
 
+/*!
+ * ptrace_read() - Read the contents of a process' virtual memory.
+ *
+ *	@param	pts	The state handle of the process to read from.
+ *
+ *	@param	addr	The address in the given process' virtual memory to
+ *			read.
+ *
+ *	@param	dest	Pointer to buffer in the current process to read the
+ *			memory contents into.
+ *
+ *	@param	len	The number of bytes to read.
+ *
+ *	@return	the actual number of bytes read.
+ */
 size_t
 ptrace_read(ptstate_t pts, vm_offset_t addr, void *dest, size_t len)
 {
@@ -334,6 +488,18 @@ ptrace_read(ptstate_t pts, vm_offset_t addr, void *dest, size_t len)
 }
 
 
+/*!
+ * ptrace_write() - Write the contents of a process' virtual memory.
+ *
+ *	@param	pts	The state handle of the process to write to.
+ *
+ *	@param	addr	The address in the process' virtual memory to write to.
+ *
+ *	@param	src	Pointer to buffer in the current process containing
+ *			the data to write.
+ *
+ *	@param	len	The number of bytes to write.
+ */
 void
 ptrace_write(ptstate_t pts, vm_offset_t addr, const void *src, size_t len)
 {

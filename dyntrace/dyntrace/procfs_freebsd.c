@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.6 2004/12/23 01:45:19 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.7 2004/12/27 04:31:54 kbyanc Exp $
  */
 
 #include <sys/param.h>
@@ -69,7 +69,12 @@ static void	 procfs_unmount(void);
 static void	 procfs_rmtmpdir(void);
 
 
-
+/*!
+ * procfs_init() - Initialize data structures for the procfs interface routines.
+ *
+ *	@return	boolean true if procfs is available and initialized, boolean
+ *		false otherwise.
+ */
 bool
 procfs_init(void)
 {
@@ -126,6 +131,16 @@ procfs_init(void)
 }
 
 
+/*!
+ * procfs_isavailable() - Determine if the procfs filesystem is supported by
+ *			  the kernel.
+ *
+ *	If procfs is not available, tries to load the kernel module for
+ *	procfs to make it available.
+ *
+ *	@return	boolean true if the kernel supports the procfs filesystem,
+ *		boolean false otherwise.
+ */
 bool
 procfs_isavailable(void)
 {
@@ -150,6 +165,7 @@ procfs_isavailable(void)
 		return false;
 	}
 
+	/* Deserves a warning as the system administrator may be concerned. */
 	warn("loaded procfs");
 #endif
 
@@ -157,6 +173,18 @@ procfs_isavailable(void)
 }
 
 
+/*!
+ * procfs_ismounted() - Determine if the procfs filesystem is mounted.
+ *
+ *	If procfs is not mounted, tried to mount it on a temporary directory.
+ *
+ *	@param	mountpointp	Pointer to populate with the address of a
+ *				newly-allocated string holding the path procfs
+ *				is mounted on.
+ *
+ *	@return	boolean true and sets \a *mountpointp if procfs is mounted,
+ *		boolean false otherwise.
+ */
 bool
 procfs_ismounted(char **mountpointp)
 {
@@ -218,6 +246,16 @@ procfs_ismounted(char **mountpointp)
 }
 
 
+/*!
+ * procfs_isaccessable() - Determine if the current process has permissions
+ *			   to access the procfs filesystem mounted at the given
+ *			   path.
+ *
+ *	@param	path	The path where procfs is mounted.
+ *
+ *	@return	boolean true if the current process can read procfs nodes
+ *		at the given path.
+ */
 bool
 procfs_isaccessable(const char *path)
 {
@@ -238,6 +276,21 @@ procfs_isaccessable(const char *path)
 }
 
 
+/*!
+ * procfs_opennode() - Internal routine to open a procfs node for the given
+ *		       process identifier.
+ *
+ *	@param	procfs	Path where procfs is mounted.
+ *
+ *	@param	pid	The process identifier whose node we are to open.
+ *
+ *	@param	node	The name of the procfs node (e.g. "mem", "map", etc).
+ *
+ *	@return	file descriptor for reading from the given node.
+ *
+ *	The FreeBSD target only requires read access to procfs nodes, so all
+ *	nodes are open by this routine read-only.
+ */
 int
 procfs_opennode(const char *procfs, pid_t pid, const char *node)
 {
@@ -263,6 +316,14 @@ procfs_opennode(const char *procfs, pid_t pid, const char *node)
 }
 
 
+/*!
+ * procfs_mount() - Internal routine to mount procfs at a given mount point.
+ *
+ *	@param	path	Path to mount procfs on.
+ *
+ *	@return	boolean true of procfs was successfully mounted at the
+ *		specified mount point path, boolean false otherwise.
+ */
 bool
 procfs_mount(const char *path)
 {
@@ -276,6 +337,9 @@ procfs_mount(const char *path)
 }
 
 
+/*!
+ * procfs_unmount() - atexit(3) handler for unmounting a temporary procfs mount.
+ */
 void
 procfs_unmount(void)
 {
@@ -288,6 +352,12 @@ procfs_unmount(void)
 }
 
 
+/*!
+ * procfs_rmtmpdir() - atexit(3) handle for removing the temporary procfs
+ *		       mount point path.
+ *
+ *	Must be called after procfs_unmount().
+ */
 void
 procfs_rmtmpdir(void)
 {
@@ -303,8 +373,29 @@ procfs_rmtmpdir(void)
 }
 
 
+/*
+ * ========================================================================
+ * What follows are the implementations of the generic routines declared in
+ * "procfs.h".
+ * ========================================================================
+ */
 
 
+/*!
+ * procfs_generic_open() - Open a process' procfs node.
+ *
+ *	@param	pid	The process identifier whose procfs node is to be
+ *			opened.
+ *
+ *	@param	node	Name of the procfs node to open.
+ *
+ *	@return	file descriptor for reading from the specified node.
+ *
+ *	Names for procfs nodes vary from system to system; the
+ *	procfs_generic_open() and procfs_generic_close() routines should only
+ *	be called from system-specific code that has knowledge of the given
+ *	system's node names.
+ */
 int
 procfs_generic_open(pid_t pid, const char *node)
 {
@@ -321,6 +412,13 @@ procfs_generic_open(pid_t pid, const char *node)
 }
 
 
+/*!
+ * procfs_generic_close() - Close a file descriptor.
+ *
+ *	@param	fdp	Pointer to file descriptor to close.
+ *
+ *	@post	The file descriptor pointed to by \a fdp is set to -1.
+ */
 void
 procfs_generic_close(int *fdp)
 {
@@ -332,6 +430,17 @@ procfs_generic_close(int *fdp)
 }
 
 
+/*!
+ * procfs_map_open() - Open process' memory-map procfs node for reading.
+ *
+ *	The memory-map procfs node allows the description of the given
+ *	process' memory map to be read.  The exact format of the memory map
+ *	is operating-system dependent.
+ *
+ *	@param	pid	The process identifier who memory-map node to open.
+ *
+ *	@return	file descriptor for reading the process' memory map.
+ */
 int
 procfs_map_open(pid_t pid)
 {
@@ -339,6 +448,13 @@ procfs_map_open(pid_t pid)
 }
 
 
+/*!
+ * procfs_map_close() - Close file handle for reading process' memory map.
+ *
+ *	@param	pmapfdp	Pointer to the file descriptor to close.
+ *
+ *	@post	Sets the file descriptor pointed to by \a pmapfdp to -1.
+ */
 void
 procfs_map_close(int *pmapfdp)
 {
@@ -346,6 +462,20 @@ procfs_map_close(int *pmapfdp)
 }
 
 
+/*!
+ * procfs_map_read() - Read a process's memory map.
+ *
+ *	@param	pmapfd	File descriptor returned by procfs_map_open() to read.
+ *
+ *	@param	destp	Pointer to a pointer to be populated with the address
+ *			of the memory map buffer.
+ *
+ *	@param	lenp	Pointer to a size_t to be populated with the number of
+ *			bytes in the memory map buffer.
+ *
+ *	The memory map buffer pointed to by \a destp on return is static
+ *	storage and should not be freed by the caller.
+ */
 void
 procfs_map_read(int pmapfd, void *destp, size_t *lenp)
 {
@@ -391,6 +521,16 @@ procfs_map_read(int pmapfd, void *destp, size_t *lenp)
 }
 
 
+/*!
+ * procfs_mem_open() - Open process' memory-access procfs node for reading.
+ *
+ *	The memory-access procfs node allows the entire virtual memory of
+ *	the given process to be readable using procfs_mem_read().
+ *
+ *	@param	pid	Process identifier whose memory to read.
+ *
+ *	@return	file descriptor for reading the process' memory.
+ */
 int
 procfs_mem_open(pid_t pid)
 {
@@ -398,6 +538,13 @@ procfs_mem_open(pid_t pid)
 }
 
 
+/*!
+ * procfs_mem_close() - Close file descriptor for reading process' memory.
+ *
+ *	@param	pmemfdp	Pointer to file descriptor to close.
+ *
+ *	@post	Sets the file descriptor pointed to by \a *pmemfdp to -1.
+ */
 void
 procfs_mem_close(int *pmemfdp)
 {
@@ -405,6 +552,20 @@ procfs_mem_close(int *pmemfdp)
 }
 
 
+/*!
+ * procfs_mem_read() - Read process' memory.
+ *
+ *	@param	pmemfd	The file descriptor returned by procfs_mem_open() for
+ *			reading from the process' memory.
+ *
+ *	@param	addr	The address in the process' virtual memory to read.
+ *
+ *	@param	dest	Pointer to a buffer to read the memory contents into.
+ *
+ *	@param	len	The number of bytes to read.
+ *
+ *	@return	the number of bytes read.
+ */
 size_t
 procfs_mem_read(int pmemfd, vm_offset_t addr, void *dest, size_t len)
 {
@@ -504,7 +665,7 @@ procfs_get_procname(pid_t pid)
 
 	/*
 	 * Make a copy of the process name to return to the caller.  We don't
-	 * have to change for strdup() returning NULL because if it does it
+	 * have to check for strdup() returning NULL because if it does it
 	 * just tells our caller we couldn't get the process name.
 	 */
 	return strdup(buffer);

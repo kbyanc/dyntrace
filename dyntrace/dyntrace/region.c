@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.8 2004/12/23 01:45:19 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.9 2004/12/27 04:31:54 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -80,6 +80,11 @@ static region_t	 region_find(region_list_t rlist, vm_offset_t addr);
 static void	 region_remove(region_t *regionp);
 
 
+/*!
+ * region_list_new() - Create a new region list.
+ *
+ *	@return	a new region list.
+ */
 region_list_t
 region_list_new(void)
 {
@@ -94,6 +99,13 @@ region_list_new(void)
 }
 
 
+/*!
+ * region_list_done() - Free all memory allocated to a region list.
+ *
+ *	@param	rlistp	Pointer to region list to free.
+ *
+ *	@post	The region list handle pointed to by *rlistp is invalidated.
+ */
 void
 region_list_done(region_list_t *rlistp)
 {
@@ -111,6 +123,18 @@ region_list_done(region_list_t *rlistp)
 }
 
 
+/*!
+ * region_find() - Internal routine to locate a region in a region list which
+ *		   encloses the specified address.
+ *
+ *	@param	rlist	Region list to search.
+ *
+ *	@param	addr	The address to locate.
+ *
+ *	This is functionally identical to the region_lookup() routine except
+ *	that it does not reorder to region list.  The intention is for
+ *	region_find() to be used to locate regions without purturbing the list.
+ */
 region_t
 region_find(region_list_t rlist, vm_offset_t addr)
 {
@@ -125,6 +149,18 @@ region_find(region_list_t rlist, vm_offset_t addr)
 }
 
 
+/*!
+ * region_lookup() - Locate the region in a region list which encloses the
+ *		     specified address.
+ *
+ *	@param	rlist	Region list to search.
+ *
+ *	@param	addr	The address to locate.
+ *
+ *	Recently-accessed regions are moved to the head of the region list
+ *	on the assumption they are most likely to be referenced again in
+ *	the near future (due to locality of reference).
+ */
 region_t
 region_lookup(region_list_t rlist, vm_offset_t addr)
 {
@@ -146,6 +182,13 @@ region_lookup(region_list_t rlist, vm_offset_t addr)
 }
 
 
+/*!
+ * region_remove() - Remove a region from its region list and free it.
+ *
+ *	@param	regionp	Pointer to region handle to remove.
+ *
+ *	@post	The region handle pointed to by regionp is invalidated.
+ */
 void
 region_remove(region_t *regionp)
 {
@@ -159,6 +202,23 @@ region_remove(region_t *regionp)
 }
 
 
+/*!
+ * region_update() - Update the given region list to include a region with
+ *		     the specified properties.
+ *
+ *	@param	rlist	Region list to update.
+ *
+ *	@param	start	Memory region start address.
+ *
+ *	@param	end	Memory region end address.
+ *
+ *	@param	type	Type of memory region.
+ *
+ *	@param	readonly Whether or not the region is read-only.
+ *
+ *	Called from the system-specific memory map parser code to update
+ *	the given region list.  Existing regions may be extended or replaced.
+ */
 void
 region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 	      region_type_t type, bool readonly)
@@ -242,6 +302,28 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 }
 
 
+/*!
+ * region_read() - Read contents of target process' memory utilizing the
+ *		   region cache.
+ *
+ *	Reads the contents of the specified process' memory into a buffer
+ *	in the current process.  If the region of memory being read is
+ *	cacheable, the contents may be read from a cache and may be stored
+ *	in the cache to satisfy future requests.
+ *
+ *	@param	targ	The target process whose memory contents to read.
+ *
+ *	@param	region	The target's memory region to read from.
+ *
+ *	@param	addr	Address within the target's virtual memory to read from.
+ *			This must be in the specified region.
+ *
+ *	@param	dest	Pointer to buffer to read contents into.
+ *
+ *	@param	len	The number of bytes to read.
+ *
+ *	@return number of bytes read.
+ */
 size_t
 region_read(target_t targ, region_t region, vm_offset_t addr,
 	    void *dest, size_t len)
@@ -303,6 +385,13 @@ region_read(target_t targ, region_t region, vm_offset_t addr,
 }
 
 
+/*!
+ * region_get_type() - Get the type of a memory region.
+ *
+ *	@param	region	The memory region to get the type of.
+ *
+ *	@return	region type code.
+ */
 region_type_t
 region_get_type(region_t region)
 {
@@ -310,6 +399,22 @@ region_get_type(region_t region)
 }
 
 
+/*!
+ * region_get_range() - Get the start and/or end addresses of a memory region.
+ *
+ *	@param	region	The memory region to get the start and/or end
+ *			addresses of.
+ *
+ *	@param	startp	Pointer to populate with the region's start address.
+ *
+ *	@param	endp	Pointer to populate with the region's end address.
+ *
+ *	@return	the length of the region in bytes (i.e. difference between
+ *		the region start and end addresses).
+ *
+ *	Either \a startp or \a endp can be NULL if the caller is not interested
+ *	in the coresponding address.
+ */
 size_t
 region_get_range(region_t region, vm_offset_t *startp, vm_offset_t *endp)
 {
