@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# $kbyanc: dyntrace/package/make-distfile,v 1.1 2005/02/01 20:56:34 kbyanc Exp $
+
+PACKAGE=dyntrace
+
+WORKDIR=`mktemp -d -t distfile` || exit 1
+
+DATESTR=`date '+%Y%m%d'`
+NEWDISTFILE=${PACKAGE}-${DATESTR}.tar.gz
+OLDDISTFILE=`ls -1 ${PACKAGE}*.tar.gz | tail -1`
+
+(
+	cd $WORKDIR
+	cvs -Q checkout -P ${PACKAGE}
+	find -X . -name CVS | xargs rm -r
+	rm -r ${PACKAGE}/package
+	tar -czf $WORKDIR/$NEWDISTFILE ${PACKAGE}
+)
+
+if [ -z $OLDDISTFILE ]; then
+	echo "new distfile $NEWDISTFILE"
+	mv $WORKDIR/$NEWDISTFILE .
+elif [ $OLDDISTFILE = $NEWDISTFILE ]; then
+	echo "updating $NEWDISTFILE"
+	mv $WORKDIR/$NEWDISTFILE .
+elif [ `cmp -s $WORKDIR/$NEWDISTFILE $OLDDISTFILE; echo $?` -eq 0 ]; then
+	echo "distfile $OLDDISTFILE is up to date"
+else
+	mv $WORKDIR/$NEWDISTFILE . && rm $OLDDISTFILE
+	echo "replaced $OLDDISTFILE with $NEWDISTFILE"
+fi
+
+rm -r $WORKDIR
