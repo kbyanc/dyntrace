@@ -1,7 +1,7 @@
 <!--
 	DTD describing opcode list used by dyntrace utility.
 
-	$kbyanc: dyntrace/doc/oplist.dtd,v 1.3 2004/12/23 01:45:18 kbyanc Exp $
+	$kbyanc: dyntrace/doc/oplist.dtd,v 1.4 2004/12/27 10:26:23 kbyanc Exp $
   -->
 
 <!ELEMENT oplist	(prefix*, op+)>
@@ -14,7 +14,7 @@
 <!ATTLIST prefix	detail		CDATA #REQUIRED>
 
 <!ATTLIST op		bitmask		CDATA #REQUIRED>
-<!ATTLIST op		mneumonic	CDATA #REQUIRED>
+<!ATTLIST op		mnemonic	CDATA #REQUIRED>
 <!ATTLIST op		detail		CDATA #IMPLIED>
 <!ATTLIST op		conditional	CDATA #IMPLIED>
 
