@@ -23,10 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.6 2004/12/19 11:18:27 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.7 2004/12/22 09:28:06 kbyanc Exp $
  */
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/event.h>
 #include <sys/sysctl.h>
 
@@ -40,6 +41,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#if HAVE_PMC
+#include <pmc.h>
+#if __i386__
+#include <machine/cpufunc.h>		/* for rdpmc() */
+#endif
+#endif
+
 #include <machine/reg.h>
 
 #include "dynprof.h"
@@ -49,12 +57,22 @@
 
 struct target_state {
 	pid_t		 pid;		/* process identifier. */
-	ptstate_t	 pts;		/* ptrace(2) state. */
 	int		 pfs_map;	/* procfs map file descriptor. */
+	ptstate_t	 pts;		/* ptrace(2) state. */
 	region_list_t	 rlist;		/* memory regions in process VM. */
+
+#if HAVE_PMC
+	pmc_id_t	 pmc;		/* handle for PMC for cycle counts. */
+	uint32_t	 pmc_regnum;	/* x86 MSR number. */
+	pmc_value_t	 cycles;	/* cycle counter. */
+#endif
+
 	char		*procname;
 };
 
+
+static bool	 pmc_avail = false;
+static const char *pmc_eventname = NULL;
 
 static vm_offset_t stack_top;
 static int	 kq;
@@ -77,6 +95,31 @@ target_init(void)
 	if (kq < 0)
 		fatal(EX_OSERR, "kqueue: %m");
 
+#if HAVE_PMC
+	pmc_avail = (pmc_init() >= 0);
+	if (pmc_avail) {
+		const struct pmc_op_getcpuinfo *cpuinfo;
+
+		if (pmc_cpuinfo(&cpuinfo) < 0)
+			fatal(EX_OSERR, "pmc_cpuinfo: %m");
+		
+		switch (cpuinfo->pm_cputype) {
+		case PMC_CPU_INTEL_PIV:
+			pmc_eventname = "p4-global-power-events,usr";
+			break;
+
+		case PMC_CPU_INTEL_PPRO:
+			pmc_eventname = "ppro-cpu-clk-unhalted,usr";
+			break;
+
+		default:
+			pmc_avail = false;
+		}
+	}
+#endif
+	if (!pmc_avail)
+		warn("pmc unavailable; instruction timing disabled");
+	
 	/*
 	 * FreeBSD always includes ptrace(2) support so we use for as much as
 	 * possible.  Currently, this includes process control, fetching
@@ -143,6 +186,30 @@ target_new(pid_t pid, ptstate_t pts, char *procname)
 	if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0)
 		fatal(EX_OSERR, "kevent: %m");
 
+#if HAVE_PMC
+	if (pmc_avail) {
+		if (pmc_allocate(strdup(pmc_eventname),
+				 PMC_MODE_TC, 0, PMC_CPU_ANY, &targ->pmc) < 0)
+			fatal(EX_OSERR, "pmc_allocate: %m");
+		if (pmc_attach(targ->pmc, pid) < 0)
+			fatal(EX_OSERR, "pmc_attach: %m");
+		if (pmc_rw(targ->pmc, 0, &targ->cycles) < 0)
+			fatal(EX_OSERR, "pmc_rw: %m");
+#if __i386__
+		/*
+		 * On the x86 line of chips (Pentium and later) we can read
+		 * the performance counter from userland using the rdpmc
+		 * instruction, eliminating a context switch.  We just need
+		 * to know which register our performance counter is in...
+		 */
+		if (pmc_i386_get_msr(targ->pmc, &targ->pmc_regnum) < 0)
+			fatal(EX_OSERR, "pmc_i386_get_msr: %m");
+#endif
+		if (pmc_start(targ->pmc) < 0)
+			fatal(EX_OSERR, "pmc_start: %m");
+	}
+#endif
+
 	return targ;
 }
 
@@ -198,6 +265,13 @@ target_detach(target_t *targp)
 	target_t targ = *targp;
 
 	*targp = NULL;
+
+#if HAVE_PMC
+	if (pmc_avail) {
+		pmc_stop(targ->pmc);
+		pmc_release(targ->pmc);
+	}
+#endif
 
 	EV_SET(&kev, targ->pid, EVFILT_PROC, EV_DELETE, NOTE_EXEC, 0, NULL);
 	kevent(kq, &kev, 1, NULL, 0, NULL);	/* Not fatal if fails. */
@@ -278,6 +352,30 @@ target_get_pc(target_t targ)
 
 	ptrace_getregs(targ->pts, &regs);
 	return regs.r_eip;
+}
+
+
+uint
+target_get_cycles(target_t targ)
+{
+
+#ifdef HAVE_PMC
+	if (pmc_avail) {
+		pmc_value_t cycles_prev = targ->cycles;
+
+#if __i386__
+		targ->cycles = rdpmc(targ->pmc_regnum);
+#else
+		if (pmc_read(targ->pmc, &targ->cycles) < 0)
+			fatal(EX_OSERR, "pmc_read: %m");
+#endif
+		assert(targ->cycles >= cycles_prev);
+		return (targ->cycles - cycles_prev);
+	}
+#endif
+
+	(void)targ;	/* Silence gcc warning when !HAVE_PMC. */
+	return 0;
 }
 
 

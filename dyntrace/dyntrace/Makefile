@@ -1,4 +1,4 @@
-# $kbyanc: dyntrace/dyntrace/Makefile,v 1.5 2004/12/22 09:03:17 kbyanc Exp $
+# $kbyanc: dyntrace/dyntrace/Makefile,v 1.6 2004/12/22 09:28:06 kbyanc Exp $
 
 PROG=		dynprof
 
@@ -23,6 +23,10 @@ XML_LDFLAGS!=	xml2-config --libs
 DEBUG_FLAGS+=	-O0 -g
 CFLAGS+=	${XML_CFLAGS}
 LDFLAGS+=	${XML_LDFLAGS}
+
+# Flags for enabling PMC support 
+#CFLAGS+=	-DHAVE_PMC=1
+#LDADD+=	-lpmc
 
 NO_WERROR=	yes
 
