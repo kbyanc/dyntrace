@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.9 2004/12/17 21:45:38 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.10 2004/12/18 02:41:37 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -54,10 +54,13 @@ typedef enum {
 	REGION_STACK		= 6
 } region_type_t;
 
+#define	NUMREGIONTYPES		  7
 #define	REGION_IS_TEXT(rt)	((rt) < REGION_NONTEXT_UNKNOWN)
 
 typedef struct region_info *region_t;
 typedef struct region_list *region_list_t;
+
+extern const char *region_type_name[NUMREGIONTYPES];
 
 
 extern bool	 opt_debug;

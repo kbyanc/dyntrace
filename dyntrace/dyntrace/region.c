@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.6 2004/12/17 21:45:38 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.7 2004/12/18 02:41:37 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -65,6 +65,16 @@ struct region_list {
 	LIST_HEAD(, region_info) head;	/* List of regions. */
 };
 
+
+const char *region_type_name[NUMREGIONTYPES] = {
+	"unknown",
+	"text",
+	"text:program",
+	"text:library",
+	"non-text",
+	"data",
+	"stack"
+};
 
 static region_t	 region_find(region_list_t rlist, vm_offset_t addr);
 static void	 region_remove(region_t *regionp);
