@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.14 2004/12/22 09:26:37 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.15 2004/12/22 20:40:24 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -41,6 +41,7 @@
 #include "dynprof.h"
 
 #define	DEFAULT_CHECKPOINT	(15 * 60)	/* 15 minutes */
+#define	DEFAULT_OPFILE		"/usr/local/share/dynprof/oplist-x86.xml"
 
 
 static void	 usage(const char *msg);
@@ -87,6 +88,7 @@ usage(const char *msg)
 int
 main(int argc, char *argv[])
 {
+	bool opsloaded = false;
 	target_t targ;
 	int ch;
 
@@ -105,6 +107,7 @@ main(int argc, char *argv[])
 
 		case 'f':
 			optree_parsefile(optarg);
+			opsloaded = true;
 			break;
 
 		case 'o':
@@ -143,6 +146,10 @@ main(int argc, char *argv[])
 
 	if (opt_checkpoint == -1)
 		opt_checkpoint = DEFAULT_CHECKPOINT;
+	if (!opsloaded) {
+		optree_parsefile(DEFAULT_OPFILE);
+		opsloaded = true;
+	}
 
 	target_init();
 
@@ -177,10 +184,13 @@ main(int argc, char *argv[])
 	/*
 	 * Install signal handlers to dump collected data on demand.  This
 	 * is used to implement periodic checkpointing (via SIGALRM) and to
-	 * allow external programs to request updates (via SIGINFO).
+	 * allow external programs to request updates (via SIGUSR1 or SIGINFO).
 	 */
 	setsighandler(SIGALRM, sig_checkpoint);
+	setsighandler(SIGUSR1, sig_checkpoint);
+#ifdef SIGINFO
 	setsighandler(SIGINFO, sig_checkpoint);
+#endif
 
 	if (opt_checkpoint == 0)
 		warn("checkpoints disabled");
