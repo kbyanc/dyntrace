@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.13 2004/12/19 11:13:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.14 2004/12/22 09:26:37 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -97,7 +97,7 @@ main(int argc, char *argv[])
 		switch ((char)ch) {
 		case 'c':
 			opt_checkpoint = atoi(optarg);
-			if (opt_checkpoint <= 0) {
+			if (opt_checkpoint < 0) {
 				fatal(EX_USAGE, "invalid count for -c: \"%s\"",
 				      optarg);
 			}
@@ -225,8 +225,9 @@ profile(target_t targ)
 	while (!terminate) {
 		vm_offset_t pc = target_get_pc(targ);
 		region_t region = target_get_region(targ, pc);
+		uint cycles = target_get_cycles(targ);
 
-		optree_update(targ, region, pc, 0);
+		optree_update(targ, region, pc, cycles);
 		instructions++;
 
 		/*
