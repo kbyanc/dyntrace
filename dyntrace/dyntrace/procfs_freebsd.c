@@ -23,13 +23,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.2 2004/12/17 05:02:58 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.3 2004/12/17 07:05:36 kbyanc Exp $
  */
 
-#include <sys/types.h>
 #include <sys/param.h>
+#include <sys/types.h>
 #include <sys/mount.h>
-#include <sys/mman.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -43,7 +42,17 @@
 #include <unistd.h>
 
 #include "dynprof.h"
+#include "procfs.h"
 
+
+/*
+ * On FreeBSD 4, the vfsconf structure exported to userland applications is
+ * the same as the structure that the kernel uses.  All later versions export
+ * a distinct xvfsconf to userland.
+ */
+#if __FreeBSD__ == 4
+#define xvfsconf vfsconf
+#endif
 
 
 static bool	 procfs_initialized = false;
@@ -122,7 +131,7 @@ procfs_init(void)
 bool
 procfs_isavailable(void)
 {
-	struct vfsconf vfc;
+	struct xvfsconf vfc;
 
 	/*
 	 * Check to see if the running kernel has support for procfs.
@@ -130,8 +139,11 @@ procfs_isavailable(void)
 	if (getvfsbyname("procfs", &vfc) == 0)
 		return true;
 
+#if __FreeBSD__ == 4
 	/*
 	 * The kernel does not support procfs; try to load it as a module.
+	 * Only necessary for FreeBSD 4 as FreeBSD 5 and later kernels will
+	 * load filesystem modules automatically when they are mounted.
 	 * This can only succeed if the user has root privileges.
 	 * XXX There is no vfsunload() to unload the module when we are done.
 	 */
@@ -141,6 +153,7 @@ procfs_isavailable(void)
 	}
 
 	warn("loaded procfs");
+#endif
 
 	return true;
 }
@@ -149,7 +162,7 @@ procfs_isavailable(void)
 bool
 procfs_ismounted(char **mountpointp)
 {
-	struct vfsconf vfc;
+	struct xvfsconf vfc;
 	struct statfs *fsinfo;
 	size_t bufsize;
 	int nummounts;
@@ -194,7 +207,7 @@ procfs_ismounted(char **mountpointp)
 	for (i = 0; i < nummounts; i++) {
 		const struct statfs *fs = &fsinfo[i];
 
-		if (fs->f_type == vfc.vfc_typenum &&
+		if ((int)fs->f_type == vfc.vfc_typenum &&
 		    procfs_isaccessable(fs->f_mntonname)) {
 			*mountpointp = strdup(fs->f_mntonname);
 			break;

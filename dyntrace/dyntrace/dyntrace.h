@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.7 2004/12/17 05:02:58 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.8 2004/12/17 07:05:36 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -120,22 +120,6 @@ extern size_t	 target_read(target_t targ, vm_offset_t addr,
 extern vm_offset_t target_get_pc(target_t targ);
 extern const char *target_get_name(target_t targ);
 extern region_t	 target_get_region(target_t targ, vm_offset_t offset);
-
-
-extern bool	 procfs_init(void);
-extern int	 procfs_map_open(pid_t pid);
-extern void	 procfs_map_close(int *pmapfdp);
-extern void	 procfs_map_read(int pmapfd, void *destp, size_t *lenp);
-
-extern int	 procfs_mem_open(pid_t pid);
-extern void	 procfs_mem_close(int *pmemfdp);
-extern size_t	 procfs_mem_read(int pmemfd, vm_offset_t addr,
-				 void *dest, size_t len);
-
-#if 0
-extern char	*procfs_get_progname(pfstate_t pfs);
-extern void	 procfs_map_load(struct procinfo *proc);
-#endif
 
 __END_DECLS
 

@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.1 2004/12/17 05:02:58 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.2 2004/12/17 07:05:36 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -32,6 +32,7 @@
 #include <libgen.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sysexits.h>
 #include <time.h>
 #include <unistd.h>
@@ -39,6 +40,7 @@
 #include <machine/reg.h>
 
 #include "dynprof.h"
+#include "procfs.h"
 #include "ptrace.h"
 
 
@@ -46,7 +48,7 @@ struct target_state {
 	pid_t		 pid;		/* process identifier. */
 	ptstate_t	 pts;		/* ptrace(2) state. */
 	int		 pfs_map;	/* procfs map file descriptor. */
-	region_list_t	 rlist;
+	region_list_t	 rlist;		/* memory regions in process VM. */
 	char		*procname;
 };
 
