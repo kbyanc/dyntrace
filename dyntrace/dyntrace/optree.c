@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.10 2004/12/17 05:02:58 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.11 2004/12/18 02:45:44 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -136,7 +136,7 @@ struct Prefix {
  *
  */
 struct counter {
-        struct counter	*next;
+	struct counter	*next;
 	prefixmask_t	 prefixmask;
 
 	uint64_t	 n;
@@ -156,8 +156,8 @@ struct counter {
 struct Opcode {
 	struct OpTreeNode node;
 
-	struct counter	 count_head;
-	struct counter	*count_end;
+	struct counter	 count_head[NUMREGIONTYPES];
+	struct counter	*count_end[NUMREGIONTYPES];
 
 	char		*bitmask;
 	char		*mneumonic;
@@ -170,6 +170,7 @@ static struct Prefix prefix_index[MAX_PREFIXES];
 static uint	 prefix_count = 0;
 static xmlTextWriterPtr writer = NULL;
 static int	 writer_fd = -1;
+static bool	 region_type_use[NUMREGIONTYPES];
 
 
 static void	 optree_init(void);
@@ -221,6 +222,9 @@ optree_init(void)
 	op->node.match.len = op->node.mask.len = 0;
 	op_rnh->rnh_addaddr(&op->node.match, &op->node.mask, op_rnh,
 			    (void *)op);
+
+	/* Clear our per-region use flags. */
+	memset(region_type_use, 0, sizeof(region_type_use));
 }
 
 
@@ -302,6 +306,9 @@ optree_update(target_t targ, region_t region, vm_offset_t pc, uint cycles)
 	assert(region != NULL);
 
 	regiontype = region_get_type(region);
+	assert(regiontype < NUMREGIONTYPES);
+
+	region_type_use[regiontype] = true;
 
 	/*
 	 * First, build mask of all prefixes before the opcode.
@@ -327,7 +334,7 @@ optree_update(target_t targ, region_t region, vm_offset_t pc, uint cycles)
 	/*
 	 * Locate the counter to update by its prefix mask.
 	 */
-	for (c = &op->count_head; c != NULL; c = c->next) {
+	for (c = &op->count_head[regiontype]; c != NULL; c = c->next) {
 		if (c->prefixmask == prefixmask)
 			break;
 	}
@@ -340,7 +347,7 @@ optree_update(target_t targ, region_t region, vm_offset_t pc, uint cycles)
 		c = calloc(1, sizeof(*c));
 		if (c == NULL)
 			fatal(EX_OSERR, "malloc: %m");
-		op->count_end->next = c;
+		op->count_end[regiontype]->next = c;
 		c->next = NULL;
 		c->prefixmask = prefixmask;
 	}
@@ -415,6 +422,7 @@ void
 optree_output(void)
 {
 	const struct Prefix *prefix;
+	region_type_t regiontype;
 	uint i;
 
 	assert(writer != NULL);
@@ -435,12 +443,23 @@ optree_output(void)
 		xmlTextWriterEndElement(writer /* prefix */);
 	}
 
-	xmlTextWriterStartElement(writer, "region");
-	xmlTextWriterWriteAttribute(writer, "type", "all");
+	/*
+	 * Iterate through the region types, outputting the opcodes in each
+	 * region.
+	 */
+	for (regiontype = 0; regiontype < NUMREGIONTYPES; regiontype++) {
 
-	op_rnh->rnh_walktree(op_rnh, optree_print_node, NULL);
+		if (!region_type_use[regiontype])
+			continue;
 
-	xmlTextWriterEndElement(writer /* "region */);
+		xmlTextWriterStartElement(writer, "region");
+		xmlTextWriterWriteAttribute(writer, "type",
+					    region_type_name[regiontype]);
+
+		op_rnh->rnh_walktree(op_rnh, optree_print_node, &regiontype);
+
+		xmlTextWriterEndElement(writer /* "region */);
+	}
 
 	xmlTextWriterEndElement(writer /* "dynprof" */);
 	xmlTextWriterEndDocument(writer);
@@ -499,23 +518,26 @@ prefix_string(prefixmask_t prefixmask)
 
 
 int
-optree_print_node(struct radix_node *rn, void *arg __unused)
+optree_print_node(struct radix_node *rn, void *arg)
 {
 	const struct OpTreeNode *node = (struct OpTreeNode *)rn;
 	const struct Opcode *op = (const struct Opcode *)node;
+	region_type_t regiontype = *(const region_type_t *)arg;
 	const struct counter *c;
 	char buffer[32];
 
 	if (node->type != OPCODE)
 		return 0;
 
+	c = &op->count_head[regiontype];
+
 	/*
-	 * If both there is one a single counter for this opcode (the one
-	 * embedded in the Opcode structure) and it has a zero count, only
-	 * output it if the printzero option was specified on the command line.
+	 * If there is only a single counter for this opcode (the one embedded
+	 * in the Opcode structure) and that counter has a zero count, then
+	 * only output it if the printzero option was specified on the command
+	 * line.
 	 */
-	if (!opt_printzero &&
-	    op->count_head.n == 0 && op->count_head.next == NULL)
+	if (c->n == 0 && c->next == NULL && !opt_printzero)
 		return 0;
 
 	xmlTextWriterStartElement(writer, "op");
@@ -524,7 +546,7 @@ optree_print_node(struct radix_node *rn, void *arg __unused)
 	if (op->detail != NULL)
 		xmlTextWriterWriteAttribute(writer, "detail", op->detail);
 
-	for (c = &op->count_head; c != NULL; c = c->next) {
+	for (; c != NULL; c = c->next) {
 		xmlTextWriterStartElement(writer, "count");
 
 		xmlTextWriterWriteAttribute(writer, "prefixes",
@@ -641,12 +663,14 @@ struct Opcode *
 opcode_alloc(void)
 {
 	struct Opcode *op;
+	region_type_t regiontype;
 
 	op = calloc(1, sizeof(*op));
 	if (op == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-	op->count_end = &op->count_head;
+	for (regiontype = 0; regiontype < NUMREGIONTYPES; regiontype++)
+		op->count_end[regiontype] = &op->count_head[regiontype];
 
 	op->node.type = OPCODE;
 	op->node.mask.len = sizeof(op->node.mask);
