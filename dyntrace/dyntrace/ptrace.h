@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/ptrace.h,v 1.1 2004/12/17 04:43:15 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.h,v 1.2 2004/12/19 11:08:08 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_PTRACE_H
@@ -44,8 +44,9 @@ extern ptstate_t ptrace_fork(pid_t *pidp);
 extern ptstate_t ptrace_attach(pid_t pid);
 extern void	 ptrace_detach(ptstate_t pts);
 extern void	 ptrace_done(ptstate_t *ptsp);
-extern bool	 ptrace_step(ptstate_t pts);
-extern bool	 ptrace_continue(ptstate_t pts);
+extern void	 ptrace_step(ptstate_t pts);
+extern void	 ptrace_continue(ptstate_t pts);
+extern bool	 ptrace_wait(ptstate_t pts);
 extern void	 ptrace_signal(ptstate_t pts, int signum);
 extern void	 ptrace_getregs(ptstate_t pts, struct reg *regs);
 extern void	 ptrace_setregs(ptstate_t pts, const struct reg *regs);

@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.5 2004/12/18 09:44:18 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.6 2004/12/19 11:08:08 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -32,6 +32,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -55,7 +56,6 @@ static bool	 ptrace_initialized = false;
 static const char *ptrace_signal_name(int sig);
 static void	 ptrace_sig_ignore(int sig);
 static ptstate_t ptrace_alloc(pid_t pid);
-static bool	 ptrace_wait(struct ptrace_state *pts);
 
 
 const char *
@@ -204,7 +204,7 @@ ptrace_done(ptstate_t *ptsp)
 }
 
 
-bool
+void
 ptrace_step(ptstate_t pts)
 {
 
@@ -217,11 +217,10 @@ ptrace_step(ptstate_t pts)
 
 	if (ptrace(PT_STEP, pts->pid, (caddr_t)1, pts->signum) < 0)
 		fatal(EX_OSERR, "ptrace(PT_STEP, %u): %m", pts->pid);
-	return ptrace_wait(pts);
 }
 
 
-bool
+void
 ptrace_continue(ptstate_t pts)
 {
 
@@ -234,7 +233,6 @@ ptrace_continue(ptstate_t pts)
 
 	if (ptrace(PT_CONTINUE, pts->pid, (caddr_t)1, pts->signum) < 0)
 		fatal(EX_OSERR, "ptrace(PT_CONTINUE, %u): %m", pts->pid);
-	return ptrace_wait(pts);
 }
 
 
@@ -243,8 +241,10 @@ ptrace_wait(ptstate_t pts)
 {
 	int status;
 
-	if (waitpid(pts->pid, &status, 0) < 0)
-		fatal(EX_OSERR, "waitpid(%u): %m", pts->pid);
+	while (waitpid(pts->pid, &status, 0) < 0) {
+		if (errno != EINTR)
+			fatal(EX_OSERR, "waitpid(%u): %m", pts->pid);
+	}
 
 	/*
 	 * The normal case is that the process is stopped.  If the process
@@ -285,7 +285,8 @@ ptrace_signal(ptstate_t pts, int signum)
 
 	assert(pts->status == ATTACHED);
 
-	pts->signum = signum;
+	if (signum != SIGTRAP)
+		pts->signum = signum;
 }
 
 
@@ -357,4 +358,3 @@ ptrace_write(ptstate_t pts, vm_offset_t addr, const void *src, size_t len)
 		len -= pio.piod_len;
 	}
 }
-
