@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/log.c,v 1.3 2004/12/23 01:45:19 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/log.c,v 1.4 2004/12/27 10:23:30 kbyanc Exp $
  */
 
 #include <assert.h>
@@ -183,9 +183,6 @@ fatal(int eval, const char *fmt, ...)
 	va_start(ap, fmt);
 	warnv(fmt, ap);
 	va_end(ap);
-
-	/* When debugging, it is more useful to get a core dump. */
-	assert(0);
 
 	exit(eval);
 }
