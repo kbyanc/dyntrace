@@ -1,0 +1,16 @@
+Index: vm_machdep.c
+===================================================================
+RCS file: /home/ncvs/src/sys/i386/i386/vm_machdep.c,v
+retrieving revision 1.241
+diff -u -p -r1.241 vm_machdep.c
+--- vm_machdep.c	20 Jul 2004 01:38:59 -0000	1.241
++++ vm_machdep.c	28 Nov 2004 02:12:28 -0000
+@@ -197,7 +197,7 @@ cpu_fork(td1, p2, td2, flags)
+ 	bcopy(td1->td_frame, td2->td_frame, sizeof(struct trapframe));
+ 
+ 	td2->td_frame->tf_eax = 0;		/* Child returns zero */
+-	td2->td_frame->tf_eflags &= ~PSL_C;	/* success */
++	td2->td_frame->tf_eflags &= ~(PSL_C|PSL_T);	/* success */
+ 	td2->td_frame->tf_edx = 1;
+ 
+ 	/*

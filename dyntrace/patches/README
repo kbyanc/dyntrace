@@ -1,0 +1,26 @@
+$kbyanc: dyntrace/patches/README,v 1.1 2004/11/28 10:34:27 kbyanc Exp $
+
+This directory contains various patches to FreeBSD to implement new
+functionality or fix existing bugs with regards to dynamic profiling
+of processes.
+
+All diffs are against FreeBSD 5.3.  Where noted, these patches have
+been committed to FreeBSD's source repository to be included in future
+releases.
+
+trace-fix.diff
+	Fixes a bug in the i386 machine-dependent portion of the fork(2)
+	implementation in which the trap flag was copied from the parent
+	to the child process.  This bug caused all children of processes
+	being single-stepped under the control of a debugger to dump
+	core immediately on return from the fork(2) call.  The cause was
+	that the processor generates a SIGTRAP because the trap flag is
+	set; the parent is under the control of a debugger which
+	intercepts the signal so the parent never receives the it,
+	however the new child is not and hence does receive the signal.
+	The default signal handler for SIGTERM is to dump core.
+
+	This patch simply clears the PSL_T (trace enable bit) in trap
+	frame of the newly-created process.  It cannot possible be under
+	the control of a debugger yet so it does not make sense to try
+	to trace it (and, as witnessed, only ends in disaster).
