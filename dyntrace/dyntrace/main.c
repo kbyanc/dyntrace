@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.9 2004/12/14 06:02:26 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.10 2004/12/15 18:06:42 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -178,7 +178,7 @@ main(int argc, char *argv[])
 	}
 
 	proc = procinfo_new(pts);
-	region_insert(proc, 1, 0xffffffff, REGION_UNKNOWN, false);
+	region_insert(proc, 1, 0xffffffff, REGION_UNKNOWN, false); /* XXX */
 
 	profile();
 
@@ -208,8 +208,9 @@ procinfo_new(ptstate_t pts)
 	if (proc == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-//	proc->pid = pid;
+	proc->pid = hack(pts);
 	proc->pts = pts;
+	proc->pfs = procfs_open(proc->pid);
 
 	return proc;
 }
@@ -259,9 +260,12 @@ profile(void)
 
 	instructions = 0;
 	while (!terminate) {
-		ptrace_getregs(proc->pts, &regs);
 
-		/* XXX MARK AS STACK(regs.r_esp) if regs.r_ss == regs.r_cs */
+#if 0
+		procfs_loadmap(proc);
+#endif
+
+		ptrace_getregs(proc->pts, &regs);
 
 		optree_update(proc, regs.r_eip, 0);
 		instructions++;

@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.1 2004/12/14 06:02:26 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.2 2004/12/15 18:06:42 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -43,6 +43,7 @@ struct region_info {
 
 	region_type_t	 type;
 	bool		 readonly;
+	bool		 use_mmap;
 
 	vm_offset_t	 bufaddr;	/* First address cached. */
 	size_t		 buflen;	/* Bytes in cache buffer. */
@@ -93,18 +94,37 @@ region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
 {
 	region_t region;
 
+	/*
+	 * Lookup any existing regions which contain the new regions' start
+	 * address.  This will find overlapping regions, but not proper
+	 * sub-regions.  The latter is OK as the new region will be ahead
+	 * of the old region in the list so it will effectively "block" it.
+	 * This isn't ideal, but works as a time versus memory tradeoff.
+	 */
 	while ((region = region_lookup(proc, start)) != NULL) {
 
+		/*
+		 * If the new region exactly matches or is an extension of an
+		 * existing region, then we simply update the existing region
+		 * and return.  This is the most common case.
+		 */
 		if (region->start == start && region->end <= end &&
 		    region->type == type && region->readonly == readonly) {
 			region->end = end;
 			return;
 		}
 
+		/*
+		 * Remove any regions that overlap the start address.
+		 */
 		region_remove(&region);
 	}
 
 	assert(region == NULL);
+
+	/*
+	 * Create a new region record and add it to the head of the list.
+	 */
 
 	region = calloc(1, sizeof(*region));
 	if (region == NULL)
@@ -116,8 +136,22 @@ region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
 	region->end = end;
 	region->readonly = readonly;
 
-	/* XXX Should use 64k if text and using procfs or have PIOD_READ_I. */
-	region->bufsize = 65536;		/* Must be at least 4 */
+	/* Default buffer size. XXX Explain why this size. */
+	region->bufsize = 16;
+
+	if (proc->pfs != NULL) {
+		region->use_mmap = true;
+
+		if (REGION_IS_TEXT(region->type))
+			region->bufsize = 1024 * 1024;
+		else
+			region->bufsize = 65536;
+
+		region->bufsize = 4096; /* XXXTMP */
+
+		return;
+	}
+
 	region->buffer = malloc(region->bufsize);
 	if (region->buffer == NULL)
 		fatal(EX_OSERR, "malloc: %m");
@@ -131,6 +165,36 @@ region_read(struct procinfo *proc, region_t region, vm_offset_t addr,
 	ssize_t offset;
 
 	assert(len > 0);
+	assert(addr + len <= region->end);
+
+	offset = addr - region->bufaddr;
+
+	if (region->use_mmap) {
+		vm_offset_t start;
+
+		assert(proc->pfs != NULL);
+
+		if (offset >= 0 && offset + len <= region->buflen) {
+			memcpy(dest, region->buffer + offset, len);
+			return len;
+		}
+
+		if (region->buffer != NULL)
+			procfs_munmap(proc->pfs, region->buffer, region->buflen);
+
+		start = addr - (region->bufsize / 2);
+		if (start < region->start)
+			start = region->start;
+
+		region->buffer = procfs_mmap(proc->pfs, start, region->bufsize);
+		region->bufaddr = start;
+		region->buflen = region->bufsize;
+
+		offset = addr - region->bufaddr;
+		assert(offset + len <= region->buflen);
+		memcpy(dest, region->buffer + offset, len);
+		return len;
+	}
 
 	/*
 	 * If the region is not readonly, we cannot cache the memory contents
@@ -146,7 +210,6 @@ region_read(struct procinfo *proc, region_t region, vm_offset_t addr,
 	/*
 	 * Satisfy the request from the region's cache if we can.
 	 */
-	offset = addr - region->bufaddr;
 	if (offset >= 0 && offset + len <= region->buflen) {
 		memcpy(dest, region->buffer + offset, len);
 		return len;

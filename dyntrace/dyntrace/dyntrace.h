@@ -23,17 +23,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.5 2004/12/14 06:02:26 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.6 2004/12/15 18:06:42 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
 #define	_INCLUDE_DYNPROF_H
 
 #include <sys/cdefs.h>
+#include <sys/queue.h>
 #include <stdbool.h>
 #include <stdio.h>
-
-#include "queue.h"
 
 #ifndef __GNUC__
 #define __attribute__()
@@ -47,6 +46,7 @@ struct reg;	/* Defined in <machine/reg.h> */
 
 
 typedef struct ptrace_state *ptstate_t;
+typedef struct procfs_state *pfstate_t;
 
 typedef enum {
 	REGION_UNKNOWN		= 0,
@@ -58,6 +58,9 @@ typedef enum {
 	REGION_STACK		= 6
 } region_type_t;
 
+#define	REGION_IS_TEXT(rt)	((rt) < REGION_NONTEXT_UNKNOWN)
+
+
 typedef struct region_info *region_t;
 typedef LIST_HEAD(region_list, region_info) region_list_t;
 
@@ -65,8 +68,8 @@ typedef LIST_HEAD(region_list, region_info) region_list_t;
 struct procinfo {
 	pid_t		 pid;		/* process identifier. */
 	ptstate_t	 pts;		/* ptrace(2) state. */
+	pfstate_t	 pfs;		/* procfs state. */
 	region_list_t	 region_list;
-	/* procfs state */
 };
 
 
@@ -114,6 +117,18 @@ extern size_t	 ptrace_read(ptstate_t pts, vm_offset_t addr,
 			     void *dest, size_t len);
 extern void	 ptrace_write(ptstate_t pts, vm_offset_t addr,
 			      const void *src, size_t len);
+
+
+extern pfstate_t procfs_open(pid_t pid);
+extern void	 procfs_done(pfstate_t *pfsp);
+extern size_t	 procfs_read(pfstate_t pfs, vm_offset_t addr,
+			     void *dest, size_t len);
+#if 0
+extern char	*procfs_get_progname(pfstate_t pfs);
+#endif
+			     
+
+extern void	 procfs_map_load(struct procinfo *proc);
 
 __END_DECLS
 

@@ -1,4 +1,4 @@
-# $kbyanc: dyntrace/dyntrace/BSDmakefile,v 1.2 2004/12/14 06:02:26 kbyanc Exp $
+# $kbyanc: dyntrace/dyntrace/BSDmakefile,v 1.3 2004/12/15 18:06:42 kbyanc Exp $
 
 PROG=		dynprof
 
@@ -8,6 +8,7 @@ BINDIR=		${PREFIX}/sbin
 SRCS=		log.c \
 		main.c \
 		optree.c \
+		procfs_freebsd.c \
 		ptrace.c \
 		radix.c \
 		region.c
