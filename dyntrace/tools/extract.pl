@@ -1,18 +1,47 @@
 #!/usr/bin/perl -w
+#
+# Copyright (c) 2004 Kelly Yancey
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+# $kbyanc: dyntrace/tools/extract.pl,v 1.2 2004/09/20 20:08:18 kbyanc Exp $
+#
 
 #
-# Extract opcodes from Intel's Instruction Set Reference.
+# Extracts opcodes from Intel's Instruction Set Reference.
 # ftp://download.intel.com/design/Pentium4/manuals/25366714.pdf
 #
-# Requires graphics/xpdf port to be installed (for pdftotext utility).
-#
-# $kbyanc: dyntrace/tools/extract.pl,v 1.1 2004/09/18 02:08:11 kbyanc Exp $
+# Requires graphics/xpdf port (for pdftotext utility) and
+# textproc/p5-XML-Writer port to be installed.
 #
 
 use strict;
 
+use POSIX qw(strftime);
+use XML::Writer;				# textproc/p5-XML-Writer
+
 my $pdftotext	= '/usr/X11R6/bin/pdftotext';	# graphics/xpfd
-my $source	= '25366714.pdf';
+my $source	= '../reference/25366714.pdf';
 
 my @sections = (
 	{
@@ -183,10 +212,12 @@ sub ParseOp($$$$) {
 	my @args_in = ();
 	my @args_out = ();
 	my $conditional;
-	my $orig_detail = $detail;
 
 	$bitstr = $1 . $bitstr if ($detail =~ s!([01]{3,})$!!o);
 	$detail = '' if ($detail =~ /^$opcode - /);
+
+	# Save the 'original' detail string to include the final output.
+	my $orig_detail = $detail;
 
 	# Do nothing if the bit string contains invalid characters.
 	# These are indicative of a false match while scanning.
@@ -491,7 +522,7 @@ reparse:
 			$addOK = $TRUE;
 		}
 
-		# All lines describing an instruction end with a bitstring
+		# All lines describing an instruction end with a bit string
 		# starting with at least 3 zeros or ones.
 		if ($line =~ /^\s*([[:alpha:]].+?)\s+([01]{3,}.*)/o ||
 		    $line =~ /^\s*(\d{1,2}-bit\s+[[:alpha:]].+?)\s+([01]{3,}.*)/o) {
@@ -548,30 +579,57 @@ reparse:
 
 
 sub Output {
+
+	my $xml = new XML::Writer(DATA_MODE => $TRUE, DATA_INDENT => 4);
+	$xml->xmlDecl('UTF-8');
+	$xml->doctype('oplist', undef, 'oplist.dtd');
+	$xml->comment('Automatically generated ' .
+		      strftime("%F %T %z", gmtime) .
+		      ' from ' . $source);
+	$xml->startTag('oplist');
+
 	foreach my $op (@ops) {
+		my $arg;
 
-		my $temp = $op->{'description'};
-		$temp =~ s!\(Note:.*\)!!goi;
-		$temp =~ s!\s+! !og;
-		$temp =~ s!\b- \b!-!og;
+		my @opargs;
+		push @opargs, 'bitmask'		=> $op->{'bitstr'};
+		push @opargs, 'mneumonic'	=> $op->{'opcode'};
+		push @opargs, 'detail'		=> $op->{'detail'}
+			if ($op->{'detail'});
+		push @opargs, 'conditional'	=> $op->{'conditional'}
+			if ($op->{'conditional'});
 
-		my $in = '';
-		my $out = '';
-		$in .= ' << ' . join(', ', @{$op->{'args_in'}}) if (@{$op->{'args_in'}});
-		$out .= ' >> ' . join(', ', @{$op->{'args_out'}}) if (@{$op->{'args_out'}});
+		$xml->startTag('op', @opargs);
 
-		formline <<'END', $op->{'bitstr'}, $op->{'opcode'}, $out, $in;
-@<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-END
-#							   @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-		print $^A;
-		$^A = '';
+		# Output opcode input/output arguments.
+		foreach $arg (@{$op->{'args_in'}}) {
+			$xml->emptyTag('arg', 'direction' => 'input',
+					      'type' => $arg);
+		}
+		foreach $arg (@{$op->{'args_out'}}) {
+			$xml->emptyTag('arg', 'direction' => 'output',
+					      'type' => $arg);
+		}
+
+		# Cleanup the description text a little before outputting it.
+		my $desc = $op->{'description'};
+		$desc =~ s!\(Note:.*\)!!goi;
+		$desc =~ s!\s+! !og;
+		$desc =~ s!\b- \b!-!og;
+
+		$xml->dataElement('description', $desc) if ($desc);
+		
+		$xml->endTag('op');
 	}
+
+	$xml->endTag('oplist');
+	$xml->end();
 }
 
 
 # --- main ---
 {
+
 	foreach my $section (@sections) {
 		my $first	= $section->{'firstpage'};
 		my $last	= $section->{'lastpage'};
