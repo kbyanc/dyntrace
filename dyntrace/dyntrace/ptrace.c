@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.2 2004/12/14 06:02:26 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.3 2004/12/17 04:47:54 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -40,6 +40,7 @@
 #include <machine/reg.h>
 
 #include "dynprof.h"
+#include "ptrace.h"
 
 
 struct ptrace_state {
@@ -48,12 +49,40 @@ struct ptrace_state {
 	int	 signum;
 };
 
-static ptstate_t ptrace_init(pid_t pid);
+static bool	 ptrace_initialized = false;
+
+static void	 ptrace_sig_ignore(int sig);
+static ptstate_t ptrace_alloc(pid_t pid);
 static bool	 ptrace_wait(struct ptrace_state *pts);
 
 
+
+void
+ptrace_init(void)
+{
+
+	/*
+	 * The traced process receives a SIGTRAP each time it stops under the
+	 * control of ptrace(2).  However, as the tracing process, we have
+	 * the opportunity to intercept the (fatal) signal if we have a
+	 * SIGCHLD handler other than the default SIG_IGN.  Since we wait
+	 * for the child to stop with waitpid(2), we install our own SIGCHLD
+	 * handler to ignore the signals.
+	 */
+	setsighandler(SIGCHLD, ptrace_sig_ignore);
+
+	ptrace_initialized = true;
+}
+
+
+void
+ptrace_sig_ignore(int sig __unused)
+{
+}
+
+
 ptstate_t
-ptrace_init(pid_t pid)
+ptrace_alloc(pid_t pid)
 {
 	ptstate_t pts;
 
@@ -70,10 +99,13 @@ ptrace_init(pid_t pid)
 
 
 ptstate_t
-ptrace_fork(void)
+ptrace_fork(pid_t *pidp)
 {
 	ptstate_t pts;
 	pid_t pid;
+
+	if (!ptrace_initialized)
+		ptrace_init();
 
 	pid = fork();
 	if (pid < 0)
@@ -95,12 +127,14 @@ ptrace_fork(void)
 	 * Wait for the child process to stop (specifically stopped due to
 	 * tracing as opposed to SIGSTOP), indicating it is ready to be traced.
 	 */
-	pts = ptrace_init(pid);
+	pts = ptrace_alloc(pid);
 	pts->status = ATTACHED;
 
 	if (!ptrace_wait(pts))
 		exit(EX_UNAVAILABLE);
 
+	if (pidp != NULL)
+		*pidp = pid;
 	return pts;
 }
 
@@ -110,10 +144,13 @@ ptrace_attach(pid_t pid)
 {
 	ptstate_t pts;
 
+	if (!ptrace_initialized)
+		ptrace_init();
+
 	if (ptrace(PT_ATTACH, pid, 0, 0) < 0)
 		fatal(EX_OSERR, "failed to attach to %u: %m", pid);
 
-	pts = ptrace_init(pid);
+	pts = ptrace_alloc(pid);
 	pts->status = ATTACHED;
 
 	/* Wait for the traced process to stop. */
@@ -136,6 +173,15 @@ ptrace_detach(ptstate_t pts)
 	pts->signum = 0;
 }
 
+
+void
+ptrace_done(ptstate_t *ptsp)
+{
+	ptstate_t pts = *ptsp;
+
+	*ptsp = NULL;
+	free(pts);
+}
 
 
 bool
