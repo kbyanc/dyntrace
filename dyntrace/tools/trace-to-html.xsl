@@ -4,7 +4,7 @@
 
 	e.g.: xsltproc -o my-prog.html trace-to-html.xsl my-prog.trace
 
-	$kbyanc: dyntrace/tools/trace-to-html.xsl,v 1.2 2004/12/23 01:45:20 kbyanc Exp $
+	$kbyanc: dyntrace/tools/trace-to-html.xsl,v 1.3 2004/12/27 10:33:51 kbyanc Exp $
  -->
 
 <xsl:stylesheet version="1.0"
@@ -37,34 +37,37 @@
 
     <br />
 
-    <h1>Opcodes:</h1>
-    <table border="1">
-    <tr>
-	<td>Mneumonic</td>
-	<td>Prefixes</td>
-	<td>N</td>
-	<td>Description</td>
-	<td>Encoding</td>
-    </tr>
-    <xsl:apply-templates select="region/op"/>
-    </table>
+    <xsl:for-each select="program">
+	<h1><xsl:value-of select="@name"/></h1>
+	<xsl:apply-templates select="region"/>
+    </xsl:for-each>
+
 </html>
 </xsl:template>
 
 
-<xsl:template match="dyntrace/region/op">
-    <xsl:variable name="mneumonic" select="@mneumonic"/>
-    <xsl:variable name="detail" select="@detail"/>
-    <xsl:variable name="bitmask" select="@bitmask"/>
-    <xsl:for-each select="count">
+<xsl:template match="dyntrace/program/region">
+    <h2>Region: <xsl:value-of select="@type"/></h2>
+    <table border="1">
+    <tr>
+	<td>Mnemonic</td>
+	<td>Prefixes</td>
+	<td align="right">N</td>
+	<td>Description</td>
+	<td>Encoding</td>
+    </tr>
+
+    <xsl:for-each select="opcount">
 	<tr>
-	    <td><xsl:value-of select="$mneumonic"/></td>
+	    <td><xsl:value-of select="@mnemonic"/></td>
 	    <td><xsl:value-of select="@prefixes"/></td>
-	    <td><xsl:value-of select="@n"/></td>
-	    <td><xsl:value-of select="$detail"/></td>
-	    <td><xsl:value-of select="$bitmask"/></td>
+	    <td align="right"><xsl:value-of select="@n"/></td>
+	    <td><xsl:value-of select="@detail"/></td>
+	    <td><xsl:value-of select="@bitmask"/></td>
 	</tr>
     </xsl:for-each>
+
+    </table>
 </xsl:template>
 
 </xsl:stylesheet>
