@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.1 2004/11/28 00:40:43 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.2 2004/11/28 10:37:56 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <sysexits.h>
 #include <unistd.h>
+
+#include <machine/reg.h>
 
 #include "dynprof.h"
 
@@ -47,6 +49,8 @@ static pid_t	opt_pid   = -1;
 int
 main(int argc, char *argv[])
 {
+	uint8_t codebuf[INSTRUCTION_MAXLEN];
+	struct reg regs;
 	struct sigaction act;
 	ptstate_t pts;
 	int ch;
@@ -111,8 +115,14 @@ main(int argc, char *argv[])
 
 	}
 
-	while (ptrace_step(pts))
-		;
+	do {
+		ptrace_getregs(pts, &regs);
+		/* XXX MARK AS STACK(regs.r_esp) if regs.r_ss == regs.r_cs */
+		ptrace_read(pts, regs.r_eip, codebuf, sizeof(codebuf));
+		optree_update(codebuf, sizeof(codebuf), 0);
+	} while (ptrace_step(pts));
+
+	optree_output(stdout);
 
 	return 0;
 }

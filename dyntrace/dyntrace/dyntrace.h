@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.1 2004/11/28 00:56:37 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.2 2004/11/28 10:37:56 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -39,6 +39,9 @@
 
 #undef __DECONST
 #define __DECONST(type, var)	((type)(uintptr_t)(const void *)(var))
+
+
+#define	INSTRUCTION_MAXLEN	16
 
 
 struct reg;	/* Defined in <machine/reg.h> */
@@ -61,7 +64,7 @@ extern void	 fatal(int eval, const char *fmt, ...)
 			__attribute__ ((noreturn, format (printf, 2, 3)));
 
 extern void	 optree_parsefile(const char *filepath);
-//extern void	 opcode_update(const void *pc, unsigned int cycles);
+extern void	 optree_update(const uint8_t *pc, size_t len, uint cycles);
 extern void	 optree_output(FILE *f);
 
 
