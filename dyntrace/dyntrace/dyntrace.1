@@ -1,0 +1,247 @@
+.\" Copyright (c) 2004 Kelly Yancey
+.\" All rights reserved.
+.\" 
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\" 
+.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.1 2004/12/22 09:03:17 kbyanc Exp $
+.\"
+.Dd December 12, 2004
+.Dt DYNPROF
+.Os
+.Sh NAME
+.Nm dynprof
+.Nd Dynamic process execution profiler
+.Sh SYNOPSIS
+.Nm
+.Op Fl vz
+.Op Fl c Ar seconds
+.Op Fl f Ar opcodefile
+.Op Fl o Ar outputfile
+.Ar command ...
+.Nm
+.Op Fl vz
+.Op Fl c Ar seconds
+.Op Fl f Ar opcodefile
+.Op Fl o Ar outputfile
+.Fl p Ar pid
+.Sh DESCRIPTION
+The
+.Nm
+utility traces the specified process building an execution profile of which
+hardware instructions are executed and the time spent by the processor to
+execute them.
+Tracing continues until either the target process exits or
+.Nm
+is terminated.
+At the end of the trace, a summary of the executed instructions and their
+timings is written to an output trace file.
+The instructions are grouped in the output based on the region of memory
+they were executed in (e.g. text, data, or stack).
+The trace file is in XML format described by the document type definition file
+.Pa /usr/local/share/dynprof/dynprof.dtd.
+.Pp
+The options are as follows:
+.Bl -tag -width ident
+.It Fl v
+Increase verbosity.
+May used multiple times to increase the amount of information
+.Nm
+reports about its own operation during the trace.
+Beware: messages are written on
+.Dv stderr
+and may be intermixed with the traced process' own output.
+.It Fl z
+Include hardware instructions with zero execution counts in the output trace
+file.
+By default, only instructions with non-zero counts are recorded.
+.It Fl c Ar seconds
+Checkpoint the execution profile every
+.Ar seconds
+seconds.
+This causes the current state of the execution profile to be written to
+the trace file periodically during a trace, allowing partial data to
+recovered in the event the trace gets interrupted.
+By default, checkpoints are performed every 15 minutes (900 seconds).
+A
+.Ar seconds
+value of 0 disables checkpointing; the execution profile will only be recorded
+to the output file when the trace terminates.
+.It Fl f Ar opcodefile
+Specify an alternate file to load descriptions of the hardware instructions
+from.
+See XXXXXX.
+.It Fl o Ar outputfile
+Specify the trace output file.
+By the default,
+.Nm
+records the execution profile in a file named
+.Va "procname" Ns No .prof
+in the current directory where
+.Va "procname"
+is the name of the process being traced.
+.It Fl p Ar pid
+Begin tracing the execution of the indicated process id (only one
+.Fl p
+flag is permitted).
+.It Ar command ...
+Execute
+.Ar command
+and trace its execution.
+The remainder of the command line arguments are passed to the specified
+command as its arguments.
+.El
+.Pp
+The
+.Fl p
+and
+.Ar command
+options are mutually exclusive.
+.Sh IMPLEMENTATION NOTES
+The
+.Nm
+utility encapsulates three main functions:
+.Bl -bullet
+.It
+Instruction counting.
+This is the most basic function of
+.Nm
+and is always available.
+The target process is single stepped through its execution with the
+.Nm
+utility updating the instruction count histogram before each instruction
+is executed.
+.It
+Instruction timing.
+Some platforms provide per-process performance counters that can be utilized
+to get the number of processor cycles elapsed in the target process between
+trace steps.
+Since the target process is stopped after each instruction, this cycle count
+represents the number of cycles elapsed executing that single instruction
+within the limits of the accuracy of the platform's performance counters.
+.Pp
+The accuracy of instruction timing is further limited by the fact that
+tracing the process perterbs its execution.
+For example, modern processor optimizations such as branch prediction and
+speculative execution are undermined by virtue of trapping and transfering
+control to
+.Nm
+for every instruction.
+As such, collected instruction timings should not be taken as absolute times
+but rather an indicator of the relative timing of instructions.
+.It
+Memory region differentiation.
+Identifies the type of memory regions instructions are executed in and
+groups them in the output according to type.
+Whether regions of the traced process' virtual memory can be categorized
+and at what level of detail they can be categorized depends on the
+platform.
+For example, if the operating system makes no distinction between regions
+of the processes' virtual memory, then all instructions are reported as
+having executed in an "unknown" region.
+.Pp
+The levels of detail in memory region differentiation from least specific
+at the top to most specific at the bottom:
+.Bd -literal
+                       .-------------.
+                       |   unknown   |
+                       `-------------'
+                      /               \e
+         .-----------.                 .------------.
+         |   text    |                 |  non-text  |  
+         `-----------'                 `------------'
+        /             \e               /              \e
+  .-----------.  .-----------.  .------------.  .-----------.
+  |  program  |  |  library  |  |    data    |  |   stack   |
+  `-----------'  `-----------'  `------------'  `-----------'
+.Ed
+.Pp
+Levels of detail are not mutually exclusive.
+It is possible for one region to be of unspecified "non-text" type while
+another region is clearly identifiable as "stack".
+.El
+.Pp
+Some functions may not be available on some platforms or may require
+elevated privileges (e.g. root user) to use;
+.Nm
+will issue a warning whenever a function is not available.
+.Sh FILES
+.Bl -tag -width ident
+.It Pa /usr/local/share/dynprof/dynprof.dtd
+Document type definition of the XML-format execution profile file output by
+.Nm .
+.It Pa /usr/local/share/dynprof/oplist.dtd
+Document type definition of the XML-format instruction description file used by
+.Nm
+to identify instructions.
+.It Pa /usr/local/share/dynprof/oplist-x86.xml
+Instruction description file for Intel(R) 8086 and later processor lines and
+their clones.
+.El
+.Pp
+.Sh EXAMPLES
+# execute and trace the command "df -u"
+.Dl $ dynprof df -u
+.Pp
+# execute and trace the command "javavm -green HelloWorld"
+.Dl $ dynprof javavm -green HelloWorld
+.Pp
+# execute and trace the command "/bin/sh", write profile to "test.prof"
+.Dl $ dynprof -o test.prof /bin/sh
+.Pp
+# begin tracing the execution of process id 1024, disable checkpointing
+.Dl $ dynprof -c 0 -p 1024
+.Pp
+.Sh AUTHORS
+.An "Kelly Yancey"
+.Aq "kbyanc@posi.net" ,
+.Aq "kbyanc@FreeBSD.org"
+.Sh BUGS
+.Nm
+does not yet support tracing multithreaded processes utilizing multiple
+light-weight processes.
+A workaround for tracing Java programs is to force the virtual machine to
+use its "green threads" implementation by specifying
+.Nm \-green
+on the java command-line (see
+.Sx EXAMPLES ) .
+.Pp
+There is currently no way to include children of the specified process
+in the trace.
+This precludes collecting useful execution profiles from programs such as
+apache which fork child processes to perform a portion of their work.
+Conversely, tracing children should never be the default as that would
+preclude tracing debuggers (or another instance of
+.Nm )
+which need to control their children themselves.
+.Pp
+Some processes are really the agreggation of multiple programs loaded in
+succession using
+.Xr execl 3
+or a similar system call.
+For example, the
+.Nm javavm
+program on FreeBSD is actually a shell script which execs another shell
+script which in turn execs the real Java VM.
+In this example, there are three programs all of which were run as a single
+process, one program after the other.
+The output trace file format should be extended to report instruction
+counts from each program separately if possible.

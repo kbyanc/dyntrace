@@ -1,9 +1,10 @@
-# $kbyanc: dyntrace/dyntrace/Makefile,v 1.4 2004/12/17 05:02:58 kbyanc Exp $
+# $kbyanc: dyntrace/dyntrace/Makefile,v 1.5 2004/12/22 09:03:17 kbyanc Exp $
 
 PROG=		dynprof
 
 PREFIX?=	/usr/local
 BINDIR=		${PREFIX}/sbin
+MANDIR?=	${PREFIX}/man/man
 
 SRCS=		log.c \
 		main.c \
@@ -14,7 +15,7 @@ SRCS=		log.c \
 		region.c \
 		target_freebsd.c
 
-NOMAN=		noman
+MAN=		dynprof.1             
 
 XML_CFLAGS!=	xml2-config --cflags
 XML_LDFLAGS!=	xml2-config --libs
