@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $kbyanc: dyntrace/tools/extract.pl,v 1.5 2004/10/15 01:39:30 kbyanc Exp $
+# $kbyanc: dyntrace/tools/extract.pl,v 1.6 2004/11/28 00:23:28 kbyanc Exp $
 #
 
 #
@@ -129,7 +129,8 @@ my @condition_list = (
 my $TRUE  = (1 == 1);
 my $FALSE = (1 == 0);
 
-my %ops = ();
+my @prefixes = ();		# Optional prefixes before instructions
+my %ops = ();			# Encodings of instructions themselves
 my $lastop;
 
 
@@ -239,7 +240,7 @@ sub ParseOp($$$$$) {
 	$detail = '' if ($detail =~ /^$opcode - /);
 
 	# Do nothing if the bit string contains invalid characters.
-	# These are indicative of a false match while scanning.
+	# These characters are indicative of a false match while scanning.
 	return if ($bitstr =~ /[=\.]/o);
 
 	# Save the 'original' detail string to include the final output.
@@ -543,12 +544,19 @@ sub Extract($$) {
 		$line =~ s! -- ! - !go;		# Used in SSE3 formats.
 		$line =~ s!--! - !go;		# Used in SSE formats.
 
-		# Special handling to skip list of prefix bytes.
+		# Special handling to parse list of instruction prefixes
 		# These appear in the opcode list even though they aren't
 		# actually opcodes.
 		if ($line =~ /^\s*Prefix Bytes\s*$/oi) {
 			while ($line = <DATA>) {
 				last if ($line =~ /^\s*$/o);
+				next unless ($line =~ /\s*(\w.*?)\s{2,}([01]{3,}.*)/o);
+				my ($detail, $bitstr) = ($1, $2);
+				$bitstr =~ s!\s+!!go;
+				push @prefixes, {
+					'detail'	=> $detail,
+					'bitstr'	=> $bitstr
+				};
 			}
 			$addOK = $FALSE;
 			next;
@@ -669,6 +677,14 @@ sub Output {
 		      ' from ' . $source);
 	$xml->startTag('oplist');
 
+	# Output list of optional instruction prefixes.
+	foreach my $prefix (@prefixes) {
+		$xml->emptyTag('prefix',
+			       'bitmask' => $prefix->{'bitstr'},
+			       'detail'	 => $prefix->{'detail'});
+	}
+
+	# Output list of instruction opcodes sorted by mneumonic.
 	foreach my $op (sort {
 				$a->{'opcode'} cmp $b->{'opcode'} or
 				$a->{'bitstr'} cmp $b->{'bitstr'}
