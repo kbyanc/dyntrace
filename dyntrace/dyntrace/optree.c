@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.1 2004/11/28 00:38:08 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.2 2004/11/28 00:55:17 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -38,7 +38,9 @@
 #include <sysexits.h>
 #include <unistd.h>
 
+#if defined(__FreeBSD__) && __FreeBSD__ >= 5
 #include <arpa/inet.h>	/* for htonl() */
+#endif
 
 #include "dynprof.h"
 #include "radix.h"
@@ -300,9 +302,9 @@ optree_output(FILE *f)
 void
 opcode_update(const void *pc, unsigned int cycles)
 {
-	struct opcode *op;
+	struct Opcode *op;
 
-	op = (struct opcode *)optree_lookup(pc);
+	op = (struct Opcode *)optree_lookup(pc);
 	if (op == NULL) {
 		/* XXX No match??? */
 		return;
@@ -425,7 +427,7 @@ opcode_free(struct Opcode **opp)
 void
 opcode_print(const struct OpTreeNode *node, FILE *f)
 {
-	const struct Opcode *op = (const struct OpCode *)node;
+	const struct Opcode *op = (const struct Opcode *)node;
 	fprintf(f, "OPCODE %-32s\t%s\n", op->bitmask, op->mneumonic);
 }
 
