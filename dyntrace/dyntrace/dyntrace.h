@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.10 2004/12/18 02:41:37 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.11 2004/12/19 11:13:36 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -105,10 +105,6 @@ extern void	 optree_output_open(void);
 extern void	 optree_output(void);
 
 
-#if 0
-extern void	 trace_update(target_t targ, vm_offset_t pc, uint n, uint cycles);
-#endif
-
 extern void	 target_init(void);
 extern void	 target_done(void);
 
@@ -116,9 +112,12 @@ extern target_t	 target_execvp(const char *path, char * const argv[]);
 extern target_t	 target_attach(pid_t pid);
 extern void	 target_detach(target_t *targp);
 
-extern bool	 target_step(target_t targ);
+extern target_t	 target_wait(void);
+extern void	 target_step(target_t targ);
+
 extern size_t	 target_read(target_t targ, vm_offset_t addr,
 			     void *dest, size_t len);
+
 extern vm_offset_t target_get_pc(target_t targ);
 extern const char *target_get_name(target_t targ);
 extern region_t	 target_get_region(target_t targ, vm_offset_t offset);

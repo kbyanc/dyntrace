@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.12 2004/12/18 01:25:22 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.13 2004/12/19 11:13:36 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -241,7 +241,12 @@ profile(target_t targ)
 			checkpoint = false;
 		}
 
-		if (terminate || !target_step(targ))
+		if (terminate)
+			break;
+
+		target_step(targ);
+		targ = target_wait();
+		if (targ == NULL)
 			break;
 	}
 }
