@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.7 2004/12/22 09:28:06 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.8 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -50,7 +50,7 @@
 
 #include <machine/reg.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 #include "procfs.h"
 #include "ptrace.h"
 
@@ -102,7 +102,7 @@ target_init(void)
 
 		if (pmc_cpuinfo(&cpuinfo) < 0)
 			fatal(EX_OSERR, "pmc_cpuinfo: %m");
-		
+
 		switch (cpuinfo->pm_cputype) {
 		case PMC_CPU_INTEL_PIV:
 			pmc_eventname = "p4-global-power-events,usr";

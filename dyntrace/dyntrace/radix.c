@@ -28,7 +28,7 @@
  *
  *	@(#)radix.c	8.5 (Berkeley) 5/19/95
  * $FreeBSD: src/sys/net/radix.c,v 1.36 2004/04/21 15:27:36 luigi Exp $
- * $kbyanc: dyntrace/dyntrace/radix.c,v 1.3 2004/11/28 00:15:25 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/radix.c,v 1.4 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 /*
@@ -42,7 +42,7 @@
 #include <string.h>
 #include <sysexits.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 #include "radix.h"
 
 #define	log(x, ...)	warn(__VA_ARGS__)

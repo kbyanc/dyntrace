@@ -1,10 +1,10 @@
 <!--
-	DTD describing output of dynprof utility.
+	DTD describing output of dyntrace utility.
 
-	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.1 2004/11/29 11:51:32 kbyanc Exp $
+	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.2 2004/12/23 01:45:18 kbyanc Exp $
   -->
 
-<!ELEMENT dynprof	(prefix*, region+)>
+<!ELEMENT dyntrace	(prefix*, region+)>
 <!ELEMENT prefix	EMPTY>
 <!ELEMENT region	(op*)>
 <!ELEMENT op		(count+)>

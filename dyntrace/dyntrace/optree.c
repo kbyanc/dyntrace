@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.11 2004/12/18 02:45:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.12 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -44,7 +44,7 @@
 #include <arpa/inet.h>	/* for htonl() */
 #endif
 
-#include "dynprof.h"
+#include "dyntrace.h"
 #include "radix.h"
 
 /*!
@@ -430,7 +430,7 @@ optree_output(void)
 	if (xmlTextWriterStartDocument(writer, NULL, "utf-8", NULL) < 0)
 		fatal(EX_IOERR, "failed to write to %s: %m", opt_outfile);
 
-	xmlTextWriterStartElement(writer, "dynprof");
+	xmlTextWriterStartElement(writer, "dyntrace");
 
 	/* First, output a list of prefixes. */
 	for (i = 0; i < prefix_count; i++) {
@@ -461,7 +461,7 @@ optree_output(void)
 		xmlTextWriterEndElement(writer /* "region */);
 	}
 
-	xmlTextWriterEndElement(writer /* "dynprof" */);
+	xmlTextWriterEndElement(writer /* "dyntrace" */);
 	xmlTextWriterEndDocument(writer);
 	xmlFreeTextWriter(writer);
 

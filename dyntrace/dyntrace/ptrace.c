@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.6 2004/12/19 11:08:08 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.7 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -41,7 +41,7 @@
 
 #include <machine/reg.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 #include "ptrace.h"
 
 

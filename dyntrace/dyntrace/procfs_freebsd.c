@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.5 2004/12/19 11:00:34 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.6 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <sys/param.h>
@@ -42,7 +42,7 @@
 #include <sysexits.h>
 #include <unistd.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 #include "procfs.h"
 
 
@@ -97,7 +97,7 @@ procfs_init(void)
 	 * Procfs is available, but not already mounted.  Create a temporary
 	 * directory and try to mount procfs there.
 	 */
-	procfs_path = strdup(_PATH_TMP "dynprof.XXXXXX");
+	procfs_path = strdup(_PATH_TMP "dyntrace.XXXXXX");
 	if (mkdtemp(procfs_path) == NULL) {
 		warn("failed to create directory %s to mount procfs: %m",
 		     procfs_path);

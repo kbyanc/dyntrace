@@ -1,4 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.12 2004/12/22 09:03:17 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.13 2004/12/23 01:45:19 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
@@ -28,7 +28,7 @@ $kbyanc: dyntrace/dyntrace/TODO,v 1.12 2004/12/22 09:03:17 kbyanc Exp $
 
  * Optimization:
    Kernel modification to record the pc and cycle count from the trap handler,
-   only stopping the traced process and waking the profiler when the array
+   only stopping the traced process and waking the tracer when the array
    becomes full.  Then we can use the optimization described above to parse
    all of the instructions described by the array.
    - Solaris appears to provide a similar interface in v9/sys/traptrace.h

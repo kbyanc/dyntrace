@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.7 2004/12/18 02:41:37 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.8 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -34,7 +34,7 @@
 #include <string.h>
 #include <sysexits.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 
 
 /*
@@ -231,7 +231,7 @@ region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 	/*
 	 * Allocate buffer to cache the region's contents.  If the allocation
 	 * fails, just pretend the region isn't read-only.  This will likely
-	 * reduce throughput of the profiler, but will allow it to continue
+	 * reduce throughput of the tracer, but will allow it to continue
 	 * to run without impacting the results.
 	 */
 	region->buffer = malloc(region->bufsize);

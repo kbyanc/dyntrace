@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.15 2004/12/22 20:40:24 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.16 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -38,14 +38,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 
 #define	DEFAULT_CHECKPOINT	(15 * 60)	/* 15 minutes */
-#define	DEFAULT_OPFILE		"/usr/local/share/dynprof/oplist-x86.xml"
+#define	DEFAULT_OPFILE		"/usr/local/share/dyntrace/oplist-x86.xml"
 
 
 static void	 usage(const char *msg);
-static void	 profile(target_t targ);
+static void	 trace(target_t targ);
 static void	 time_record(const char *msg, struct timeval *tvp);
 static void	 epilogue(void);
 static uint	 rounddiv(uint64_t a, uint64_t b);
@@ -167,7 +167,7 @@ main(int argc, char *argv[])
 	}
 
 	if (opt_outfile == NULL)
-		asprintf(&opt_outfile, "%s.prof", target_get_name(targ));
+		asprintf(&opt_outfile, "%s.trace", target_get_name(targ));
 
 	optree_output_open();
 	warn("recording results to %s", opt_outfile);
@@ -200,11 +200,11 @@ main(int argc, char *argv[])
 		     opt_checkpoint);
 	}
 
-	time_record("profile started at", &starttime);
+	time_record("trace started at", &starttime);
 
-	profile(targ);
+	trace(targ);
 
-	time_record("profile stopped at", &stoptime);
+	time_record("trace stopped at", &stoptime);
 	epilogue();
 
 	optree_output();
@@ -229,7 +229,7 @@ main(int argc, char *argv[])
 
 
 void
-profile(target_t targ)
+trace(target_t targ)
 {
 
 	while (!terminate) {
@@ -297,7 +297,7 @@ epilogue(void)
 	ips = rounddiv(instructions * 1000000,
 		       (stoptime.tv_sec * 1000) +
 		       rounddiv(stoptime.tv_usec, 1000));
-	debug("%llu instructions profiled in "
+	debug("%llu instructions traced in "
 	      "%0lu.%03u seconds (%0u.%03u/sec)",
 	      (unsigned long long)instructions,
 	      stoptime.tv_sec, rounddiv(stoptime.tv_usec, 1000),

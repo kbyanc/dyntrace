@@ -1,10 +1,10 @@
 <!--
 	XSLT stylesheet for producing a simple HTML document from a
-	dynprof results file.
+	dyntrace results file.
 
-	e.g.: xsltproc -o my-prog.html dynprof-to-html.xsl my-prog.dynprof
+	e.g.: xsltproc -o my-prog.html trace-to-html.xsl my-prog.trace
 
-	$kbyanc: dyntrace/tools/trace-to-html.sh,v 1.1 2004/12/01 03:32:18 kbyanc Exp $
+	$kbyanc: dyntrace/tools/trace-to-html.sh,v 1.2 2004/12/23 01:45:20 kbyanc Exp $
  -->
 
 <xsl:stylesheet version="1.0"
@@ -17,7 +17,7 @@
 	encoding="iso-8859-1"
 />
 
-<xsl:template match="dynprof">
+<xsl:template match="dyntrace">
 <html>
     <h1>Instruction Prefixes:</h1>
     <table border="1">
@@ -52,7 +52,7 @@
 </xsl:template>
 
 
-<xsl:template match="dynprof/region/op">
+<xsl:template match="dyntrace/region/op">
     <xsl:variable name="mneumonic" select="@mneumonic"/>
     <xsl:variable name="detail" select="@detail"/>
     <xsl:variable name="bitmask" select="@bitmask"/>

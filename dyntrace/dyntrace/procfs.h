@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/procfs.h,v 1.2 2004/12/17 10:57:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs.h,v 1.3 2004/12/23 01:45:19 kbyanc Exp $
  */
 
-#ifndef _INCLUDE_DYNPROF_PROCFS_H
-#define	_INCLUDE_DYNPROF_PROCFS_H
+#ifndef _INCLUDE_DYNTRACE_PROCFS_H
+#define	_INCLUDE_DYNTRACE_PROCFS_H
 
 #include <sys/cdefs.h>
 #include <stdbool.h>

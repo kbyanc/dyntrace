@@ -22,14 +22,14 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\" 
-.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.2 2004/12/22 21:35:38 kbyanc Exp $
+.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.3 2004/12/23 01:45:19 kbyanc Exp $
 .\"
 .Dd December 12, 2004
-.Dt DYNPROF "" "Dynprof User's Manual"
+.Dt DYNTRACE "" "Dyntrace User's Manual"
 .Os
 .Sh NAME
-.Nm dynprof
-.Nd Dynamic process execution profiler
+.Nm dyntrace
+.Nd Dynamic execution tracing utility
 .Sh SYNOPSIS
 .Nm
 .Op Fl vz
@@ -57,7 +57,7 @@ timings is written to an output trace file.
 The instructions are grouped in the output based on the region of memory
 they were executed in (e.g. text, data, or stack).
 The trace file is in XML format described by the document type definition file
-.Pa /usr/local/share/dynprof/dynprof.dtd.
+.Pa /usr/local/share/dyntrace/dyntrace.dtd.
 .Pp
 The options are as follows:
 .Bl -tag -width ident
@@ -104,7 +104,7 @@ Specify the trace output file.
 By the default,
 .Nm
 records the execution profile in a file named
-.Va "procname" Ns No .prof
+.Va "procname" Ns No .trace
 in the current directory where
 .Va "procname"
 is the name of the process being traced.
@@ -219,30 +219,30 @@ elevated privileges (e.g. root user) to use;
 will issue a warning whenever a function is not available.
 .Sh FILES
 .Bl -tag -width ident
-.It Pa /usr/local/share/dynprof/dynprof.dtd
+.It Pa /usr/local/share/dyntrace/dyntrace.dtd
 Document type definition of the XML-format execution profile file output by
 .Nm .
-.It Pa /usr/local/share/dynprof/oplist.dtd
+.It Pa /usr/local/share/dyntrace/oplist.dtd
 Document type definition of the XML-format instruction description file used by
 .Nm
 to identify instructions.
-.It Pa /usr/local/share/dynprof/oplist-x86.xml
+.It Pa /usr/local/share/dyntrace/oplist-x86.xml
 Instruction description file for Intel(R) 8086 and later processor lines and
 their clones.
 .El
 .Pp
 .Sh EXAMPLES
 # execute and trace the command "df -i"
-.Dl $ dynprof df -i
+.Dl $ dyntrace df -i
 .Pp
 # execute and trace the command "javavm -green HelloWorld"
-.Dl $ dynprof javavm -green HelloWorld
+.Dl $ dyntrace javavm -green HelloWorld
 .Pp
-# execute and trace the command "/bin/sh", write profile to "test.prof"
-.Dl $ dynprof -o test.prof /bin/sh
+# execute and trace the command "/bin/sh", write profile to "test.trace"
+.Dl $ dyntrace -o test.trace /bin/sh
 .Pp
 # begin tracing the execution of process id 1024, disable checkpointing
-.Dl $ dynprof -c 0 -p 1024
+.Dl $ dyntrace -c 0 -p 1024
 .Pp
 .Sh DIAGNOSTICS
 On error,
@@ -252,7 +252,7 @@ exits with one of the exit codes defined in the host operating system's
 .Sh COMPATIBILITY
 The
 .Nm
-profiler runs on the following platforms:
+tracer runs on the following platforms:
 .Bl -tag -width "FreeBSD/i386"
 .It FreeBSD/i386
 Instruction counting and region differentiation are implemented on all versions

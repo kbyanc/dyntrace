@@ -1,7 +1,7 @@
-$kbyanc: dyntrace/patches/README,v 1.2 2004/12/13 05:02:44 kbyanc Exp $
+$kbyanc: dyntrace/patches/README,v 1.3 2004/12/23 01:45:20 kbyanc Exp $
 
 This directory contains various patches to FreeBSD to implement new
-functionality or fix existing bugs with regards to dynamic profiling
+functionality or fix existing bugs with regards to dynamic tracing
 of processes.
 
 All diffs are against FreeBSD 5.3.  Where noted, these patches have

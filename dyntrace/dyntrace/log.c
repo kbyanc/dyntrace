@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/log.c,v 1.2 2004/12/19 10:59:02 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/log.c,v 1.3 2004/12/23 01:45:19 kbyanc Exp $
  */
 
 #include <assert.h>
@@ -34,7 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "dynprof.h"
+#include "dyntrace.h"
 
 
 #define	WARN_BUFFER_SIZE	128
