@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.12 2004/12/23 01:45:19 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.13 2004/12/27 04:32:44 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -50,15 +50,14 @@
 /*!
  * @file
  *
- * XXXX
- *	We use the same radix tree code that FreeBSD (and other 4.4BSD
- *	derivatives) uses for routing lookups.  This data structure is
- *	perfectly suited for matching opcode bit strings as it provides
- *	best-match lookups with masking.  Masking is especially useful as it
- *	allows for don't-care bits in opcode bit strings (a requirement for
- *	the x86 instruction set and possibly others).
+ * We use the same radix tree code that FreeBSD (and other 4.4BSD derivatives)
+ * uses for routing lookups to implement opcode identification.  This data
+ * structure is perfectly suited for matching opcode bit strings as it provides
+ * best-match lookups with masking.  Masking is especially useful as it allows
+ * for don't-care bits in opcode bit strings (a requirement for the x86
+ * instruction set and possibly others).
  *
- *
+ * For an explanation of how the radix tree works, see:
  * Gary R. Wright and W. Richard Stevens. TCP/IP Illustrated, Volume 2:
  * The Implementation, chapter 18.
  *
@@ -93,12 +92,6 @@ struct bitval {
  * Data structure representing a single opcode.  This is used as an entry in
  * the radix tree so the first 2 fields must be pointers to radix tree nodes
  * (simulating a BSD rtentry structure).
- *
- *	@param	rn		
- *
- *	@param	match
- *
- *	@param	mask
  */
 struct OpTreeNode {
 	struct radix_node rn[2];
@@ -126,14 +119,28 @@ struct Prefix {
 /*!
  * @struct counter
  *
- *	@param	count
+ *	Each opcode has a list of counters per memory region type.  Each
+ *	counter in the list represents the usage count and timing for the
+ *	opcode with a given set of prefixes.  Since the most common case
+ *	is an opcode unadorned with prefix bytes, the first counter in the
+ *	list is embedded within the opcode structure itself and has a nul
+ *	prefix mask.
  *
- *	@param	cycles_total
+ *	@param	next		Pointer to next counter in list.
  *
- *	@param	cycles_min
+ *	@param	prefixmask	Prefix mask this counter is for.
  *
- *	@param	cycles_max
+ *	@param	count		The number of times the opcode has been
+ *				executed with our list of prefixes.
  *
+ *	@param	cycles_total	The total number of CPU cycles accumulated
+ *				across all executions.
+ *
+ *	@param	cycles_min	The minimum number of CPU cycles for any
+ *				single execution.
+ *
+ *	@param	cycles_max	The maximum number of CPU cycles for any
+ *				single execution.
  */
 struct counter {
 	struct counter	*next;
@@ -148,10 +155,6 @@ struct counter {
 
 /*!
  * @struct Opcode
- *
- *
- *
- *	@param	bitmask
  */
 struct Opcode {
 	struct OpTreeNode node;
