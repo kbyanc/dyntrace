@@ -1,0 +1,27 @@
+<!--
+	DTD describing output of dynprof utility.
+
+	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.1 2004/11/29 11:51:32 kbyanc Exp $
+  -->
+
+<!ELEMENT dynprof	(prefix*, region+)>
+<!ELEMENT prefix	EMPTY>
+<!ELEMENT region	(op*)>
+<!ELEMENT op		(count+)>
+
+<!ATTLIST prefix	id		CDATA #REQUIRED>
+<!ATTLIST prefix	bitmask		CDATA #REQUIRED>
+<!ATTLIST prefix	detail		CDATA #REQUIRED>
+
+<!ATTLIST region	type		CDATA #REQUIRED>
+
+<!ATTLIST op		bitmask		CDATA #REQUIRED>
+<!ATTLIST op		mneumonic	CDATA #REQUIRED>
+<!ATTLIST op		detail		CDATA #IMPLIED>
+
+<!ATTLIST count		prefixes	CDATA #REQUIRED>
+<!ATTLIST count		n		CDATA #REQUIRED>
+<!ATTLIST count		cycles		CDATA #IMPLIED>
+<!ATTLIST count		min		CDATA #IMPLIED>
+<!ATTLIST count		max		CDATA #IMPLIED>
+
