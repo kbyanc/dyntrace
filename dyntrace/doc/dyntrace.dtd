@@ -1,7 +1,7 @@
 <!--
 	DTD describing output of dyntrace utility.
 
-	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.3 2004/12/27 10:31:36 kbyanc Exp $
+	$kbyanc: dyntrace/doc/dyntrace.dtd,v 1.4 2004/12/27 12:23:20 kbyanc Exp $
   -->
 
 <!ELEMENT dyntrace	(prefix*, region+)>
@@ -25,4 +25,7 @@
 <!ATTLIST opcount	cycles		CDATA #IMPLIED>
 <!ATTLIST opcount	min		CDATA #IMPLIED>
 <!ATTLIST opcount	max		CDATA #IMPLIED>
+
+<!ATTLIST opcount	relfreq		CDATA #IMPLIED>
+<!ATTLIST opcount	reltime		CDATA #IMPLIED>
 
