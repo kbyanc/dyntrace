@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $kbyanc: dyntrace/tools/extract.pl,v 1.7 2004/12/18 03:26:50 kbyanc Exp $
+# $kbyanc: dyntrace/tools/extract.pl,v 1.8 2004/12/27 10:32:28 kbyanc Exp $
 #
 
 #
@@ -684,7 +684,7 @@ sub Output {
 			       'detail'	 => $prefix->{'detail'});
 	}
 
-	# Output list of instruction opcodes sorted by mneumonic.
+	# Output list of instruction opcodes sorted by mnemonic.
 	foreach my $op (sort {
 				$a->{'opcode'} cmp $b->{'opcode'} or
 				$a->{'bitstr'} cmp $b->{'bitstr'}
@@ -693,7 +693,7 @@ sub Output {
 
 		my @opargs;
 		push @opargs, 'bitmask'		=> $op->{'bitstr'};
-		push @opargs, 'mneumonic'	=> $op->{'opcode'};
+		push @opargs, 'mnemonic'	=> $op->{'opcode'};
 		push @opargs, 'detail'		=> $op->{'detail'}
 			if ($op->{'detail'});
 		push @opargs, 'conditional'	=> $op->{'conditional'}

@@ -4,7 +4,7 @@
 
 	e.g.: xsltproc -o oplist.html oplist-to-html.xsl oplist-x86.xml
 
-	$kbyanc: dyntrace/tools/oplist-to-html.sh,v 1.1 2004/11/29 11:44:22 kbyanc Exp $
+	$kbyanc: dyntrace/tools/oplist-to-html.sh,v 1.2 2004/12/27 10:33:03 kbyanc Exp $
  -->
 
 <xsl:stylesheet version="1.0"
@@ -33,7 +33,7 @@
     <h1>Opcodes:</h1>
     <table border="1">
     <tr>
-	<td>Mneumonic</td>
+	<td>Mnemonic</td>
 	<td>Description</td>
 	<td>Detail</td>
 	<td>Encoding</td>
@@ -53,7 +53,7 @@
 <xsl:template match="oplist/op">
     <tr>
 	<td>
-	    <xsl:value-of select="@mneumonic"/>
+	    <xsl:value-of select="@mnemonic"/>
 	    <xsl:if test="@conditional">
 		(<xsl:value-of select="@conditional"/>)
 	    </xsl:if>
