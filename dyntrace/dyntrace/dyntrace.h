@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.3 2004/11/29 02:13:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.4 2004/11/29 11:57:55 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -47,8 +47,10 @@ struct reg;	/* Defined in <machine/reg.h> */
 typedef struct ptrace_state *ptstate_t;
 
 
-extern bool	 opt_printzero;
 extern bool	 opt_debug;
+extern bool	 opt_printzero;
+extern pid_t	 opt_pid;
+extern char	*opt_outfile;
 
 #define debug(fmt, ...) do {			\
 	if (opt_debug) warn(fmt, __VA_ARGS__);	\
@@ -63,7 +65,8 @@ extern void	 fatal(int eval, const char *fmt, ...)
 
 extern void	 optree_parsefile(const char *filepath);
 extern void	 optree_update(const uint8_t *pc, size_t len, uint cycles);
-extern void	 optree_output(FILE *f);
+extern void	 optree_output_open(void);
+extern void	 optree_output(void);
 
 
 extern ptstate_t ptrace_fork(void);

@@ -23,10 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.4 2004/11/29 02:13:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.5 2004/11/29 11:57:55 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
+#include <libxml/xmlwriter.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -106,6 +107,21 @@ struct OpTreeNode {
 };
 
 
+typedef uint prefixmask_t;
+#define	PREFIXMASK_EMPTY	0
+#define	MAX_PREFIXES		(sizeof(prefixmask_t) * 8)
+
+struct Prefix {
+	struct OpTreeNode node;
+
+	uint8_t		 len;
+	uint8_t		 id;
+	prefixmask_t	 mask;
+	char		*bitmask;
+	char		*detail;
+};
+
+
 /*!
  * @struct counter
  *
@@ -119,7 +135,10 @@ struct OpTreeNode {
  *
  */
 struct counter {
-	uint64_t	 count;
+        struct counter	*next;
+	prefixmask_t	 prefixmask;
+
+	uint64_t	 n;
 	uint64_t	 cycles_total;
 	uint		 cycles_min;
 	uint		 cycles_max;
@@ -136,34 +155,20 @@ struct counter {
 struct Opcode {
 	struct OpTreeNode node;
 
-	struct counter	 count;
+	struct counter	 count_head;
+	struct counter	*count_end;
 
 	char		*bitmask;
 	char		*mneumonic;
 	char		*detail;
-
-	// XXXX per-prefix count
 };
 
-
-typedef uint prefixmask_t;
-#define	PREFIXMASK_EMPTY	0
-#define	MAX_PREFIXES		(sizeof(prefixmask_t) * 8)
-
-struct Prefix {
-	struct OpTreeNode node;
-
-	uint8_t		 len;
-	uint8_t		 id;
-	prefixmask_t	 mask;
-	char		*bitmask;
-	char		*detail;
-};
 
 static struct radix_node_head *op_rnh = NULL;
 static struct Prefix prefix_index[MAX_PREFIXES];
+static uint	 prefix_count = 0;
+static xmlTextWriterPtr writer = NULL;
 
-static uint prefix_count = 0;
 
 static void	 optree_init(void);
 static bool	 optree_insert(struct OpTreeNode *op);
@@ -173,6 +178,8 @@ static int	 optree_print_node(struct radix_node *rn, void *arg);
 static void	 opcode_parse(xmlNode *node);
 static void	 opcode_free(struct Opcode **opp);
 
+static const char *prefix_string(prefixmask_t prefixmask);
+static void	 prefix_output(const struct Prefix *prefix);
 static void	 prefix_parse(xmlNode *node);
 static void	 prefix_free(struct Prefix **prefixp);
 
@@ -267,34 +274,6 @@ optree_lookup(const void *keyptr)
 }
 
 
-int
-optree_print_node(struct radix_node *rn, void *arg)
-{
-	const struct OpTreeNode *node = (struct OpTreeNode *)rn;
-	const struct Opcode *op = (const struct Opcode *)node;
-	FILE *f = arg;
-
-	if (node->type != OPCODE)
-		return 0;
-
-	if (op->count.count == 0)
-		return 0;
-
-	fprintf(f, "%-32s\t%s\t%ju\n", op->bitmask, op->mneumonic, op->count.count);
-	return 0;
-}
-
-
-void
-optree_output(FILE *f)
-{
-
-	/* XXX First, print prefixes. */
-
-	op_rnh->rnh_walktree(op_rnh, optree_print_node, f);
-}
-
-
 void
 optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
 {
@@ -332,11 +311,28 @@ optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
 	if (len < sizeof(node->match.val))
 		goto toolong;
 
-	debug("%s\t(0x%4x, %s)", op->mneumonic, prefixmask, op->bitmask);
+	/*
+	 * Locate the counter to update by its prefix mask.
+	 */
+	for (c = &op->count_head; c != NULL; c = c->next) {
+		if (c->prefixmask == prefixmask)
+			break;
+	}
 
-	c = &op->count;
+	/*
+	 * If there is no existing counter for the current prefix mask,
+	 * append a new counter to the end of the list.
+	 */
+	if (c == NULL) {
+		c = calloc(1, sizeof(*c));
+		if (c == NULL)
+			fatal(EX_OSERR, "malloc: %m");
+		op->count_end->next = c;
+		c->next = NULL;
+		c->prefixmask = prefixmask;
+	}
 
-	c->count++;
+	c->n++;
 	c->cycles_total += cycles;
 	if (cycles < c->cycles_min)
 		c->cycles_min = cycles;
@@ -346,6 +342,153 @@ optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
 
 toolong:
 	warn("encountered instruction longer than %u bytes; skipping", origlen);
+}
+
+
+void
+optree_output_open(void)
+{
+
+	assert(opt_outfile != NULL);
+	assert(writer == NULL);
+
+	writer = xmlNewTextWriterFilename(opt_outfile, 0);
+	if (writer == NULL) {
+		fatal(EX_CANTCREAT, "unable to open %s for writing: %m",
+		      opt_outfile);
+	}
+
+	xmlTextWriterSetIndent(writer, 4);
+}
+
+
+void
+optree_output(void)
+{
+	uint i;
+
+	assert(writer != NULL);
+
+	if (xmlTextWriterStartDocument(writer, NULL, "utf-8", NULL) < 0)
+		fatal(EX_IOERR, "failed to write to %s: %m", opt_outfile);
+
+	xmlTextWriterStartElement(writer, "dynprof");
+
+	/* First, output a list of prefixes. */
+	for (i = 0; i < prefix_count; i++)
+		prefix_output(&prefix_index[i]);
+
+	xmlTextWriterStartElement(writer, "region");
+	xmlTextWriterWriteAttribute(writer, "type", "all");
+
+	op_rnh->rnh_walktree(op_rnh, optree_print_node, NULL);
+
+	xmlTextWriterEndElement(writer /* "region */);
+
+	xmlTextWriterEndElement(writer /* "dynprof" */);
+	xmlTextWriterEndDocument(writer);
+	xmlFreeTextWriter(writer);
+
+	writer = NULL;
+}
+
+
+const char *
+prefix_string(prefixmask_t prefixmask)
+{
+	static char buffer[100];
+	size_t len;
+	int id;
+
+	/* No instruction prefix is the most common case. */
+	if (prefixmask == 0)
+		return "";
+
+	len = 0;
+
+	for (id = 0; prefixmask != 0; id++, prefixmask >>= 1) {
+		char idstr[3] = { 'A', '\0', '\0' };
+		size_t idstrlen = 1;
+
+		if (id < 26)
+			idstr[0] += id;
+		else {
+			idstr[1] = 'A' + id - 26;
+			idstrlen++;
+		}
+
+		assert(len + idstrlen + 1 < sizeof(buffer));
+		assert(idstrlen <= 2);
+
+		if (len > 0)
+			buffer[len++] = ',';
+
+		buffer[len + 0] = idstr[0];
+		buffer[len + 1] = idstr[1];
+		len += idstrlen;
+	}
+
+	buffer[len] = '\0';
+	return buffer;
+}
+
+
+int
+optree_print_node(struct radix_node *rn, void *arg __unused)
+{
+	const struct OpTreeNode *node = (struct OpTreeNode *)rn;
+	const struct Opcode *op = (const struct Opcode *)node;
+	const struct counter *c;
+	char buffer[32];
+
+	if (node->type != OPCODE)
+		return 0;
+
+	/*
+	 * If both there is one a single counter for this opcode (the one
+	 * embedded in the Opcode structure) and it has a zero count, only
+	 * output it if the printzero option was specified on the command line.
+	 */
+	if (!opt_printzero &&
+	    op->count_head.n == 0 && op->count_head.next == NULL)
+		return 0;
+
+	xmlTextWriterStartElement(writer, "op");
+	xmlTextWriterWriteAttribute(writer, "bitmask", op->bitmask);
+	xmlTextWriterWriteAttribute(writer, "mneumonic", op->mneumonic);
+	if (op->detail != NULL)
+		xmlTextWriterWriteAttribute(writer, "detail", op->detail);
+
+	for (c = &op->count_head; c != NULL; c = c->next) {
+		xmlTextWriterStartElement(writer, "count");
+
+		xmlTextWriterWriteAttribute(writer, "prefixes",
+					    prefix_string(c->prefixmask));
+
+		snprintf(buffer, sizeof(buffer), "%qu", c->n);
+		xmlTextWriterWriteAttribute(writer, "n", buffer);
+
+		/* Only output cycle counts if we have them. */
+		if (c->cycles_total == 0) {
+			xmlTextWriterEndElement(writer /* "count" */);
+			continue;
+		}
+
+		snprintf(buffer, sizeof(buffer), "%qu", c->cycles_total);
+		xmlTextWriterWriteAttribute(writer, "cycles", buffer);
+
+		snprintf(buffer, sizeof(buffer), "%u", c->cycles_min);
+		xmlTextWriterWriteAttribute(writer, "min", buffer);
+
+		snprintf(buffer, sizeof(buffer), "%u", c->cycles_min);
+		xmlTextWriterWriteAttribute(writer, "max", buffer);
+
+		xmlTextWriterEndElement(writer /* "count" */);
+	}
+
+	xmlTextWriterEndElement(writer /* op */);
+
+	return 0;
 }
 
 
@@ -387,7 +530,6 @@ optree_parsefile(const char *filepath)
 
 
 
-
 void
 opcode_parse(xmlNode *node)
 {
@@ -422,6 +564,8 @@ opcode_parse(xmlNode *node)
 		      XML_GET_LINE(node));
 	}
 
+	op->count_end = &op->count_head;
+
 	op->node.type = OPCODE;
 	op->node.mask.len = sizeof(op->node.mask);
 	op->node.match.len = sizeof(op->node.match);
@@ -447,6 +591,25 @@ opcode_free(struct Opcode **opp)
 	if (op->detail != NULL)
 		free(op->detail);
 	free(op);
+}
+
+
+
+void
+prefix_output(const struct Prefix *prefix)
+{
+	char id[3] = { 'A', '\0', '\0' };
+
+	if (prefix->id < 26)
+		id[0] += prefix->id;
+	else
+		id[1] = 'A' + prefix->id - 26;
+
+	xmlTextWriterStartElement(writer, "prefix");
+	xmlTextWriterWriteAttribute(writer, "id", id);
+	xmlTextWriterWriteAttribute(writer, "bitmask", prefix->bitmask);
+	xmlTextWriterWriteAttribute(writer, "detail", prefix->detail);
+	xmlTextWriterEndElement(writer /* prefix */);
 }
 
 

@@ -1,21 +1,9 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.2 2004/11/29 02:34:24 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.3 2004/11/29 11:57:55 kbyanc Exp $
 
- * Define output format.
-   Three dimensions: opcode, prefix combination, memory region.
-   Should probably add a flag to indicate whether to include opcodes
-   with zero counts (default to not including them).
-   <prefix id="A" bitmask="..." detail="..." />
-   <region type="CODE">
-	<opcode bitmask="..." mneumonic="ABC" detail="...">
-		<count prefixes="" n="12" ... />
-		<count prefixes="A,C" n="1" ... />
-	</opcode>
-   </region>
+ ** Send sample output to professor with progress update.
 
  * Add default "unknown" opcode to optree.
    Both key and mask should be all zeros (match anything).
-
- ** Send sample output to professor with progress update.
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 

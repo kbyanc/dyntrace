@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.3 2004/11/29 02:13:44 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.4 2004/11/29 11:57:55 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -39,40 +39,44 @@
 
 
 static void usage(const char *msg);
-static void sigchild(int sig);
+static void setsighandler(int sig, void (*handler)(int));
+static void sig_ignore(int sig);
+static void sig_terminate(int sig);
 
 
-       bool	opt_debug	= false;
-static bool	opt_printzero	= false;
-static pid_t	opt_pid		= -1;
+bool	 terminate	= false;
 
+bool	 opt_debug	= false;
+bool	 opt_printzero	= false;
+pid_t	 opt_pid	= -1;
+char	*opt_outfile	= NULL;
 
 int
 main(int argc, char *argv[])
 {
 	uint8_t codebuf[16];
 	struct reg regs;
-	struct sigaction act;
 	ptstate_t pts;
 	int ch;
-
-	act.sa_handler = sigchild;
-	act.sa_flags = SA_RESTART;
-	sigemptyset(&act.sa_mask);
-	sigaction(SIGCHLD, &act, NULL);
 
 	if (argc == 1)
 		usage(NULL);
 
-	while ((ch = getopt(argc, argv, "f:p:vz")) != -1) {
+	while ((ch = getopt(argc, argv, "f:o:p:vz")) != -1) {
 		switch ((char)ch) {
 		case 'f':
 			optree_parsefile(optarg);
 			break;
 
+		case 'o':
+			if (opt_outfile != NULL)
+				usage("only one output file can be specified");
+			opt_outfile = optarg;
+			break;
+
 		case 'p':
 			if (opt_pid != -1)
-				usage("-p can only be specified once");
+				usage("only one process id can be specified");
 			opt_pid = atoi(optarg);
 			if (opt_pid <= 0) {
 				fatal(EX_USAGE,
@@ -98,11 +102,23 @@ main(int argc, char *argv[])
 	argv += optind;
 	argc -= optind;
 
+	/*
+	 * The traced process receives a SIGTRAP each time it stops under the
+	 * control of ptrace(2).  However, as the tracing process, we have
+	 * the opportunity to intercept the (fatal) signal if we have a
+	 * SIGCHLD handler other than the default SIG_IGN.  Since we wait
+	 * for the child to stop with waitpid(2), we install our own SIGCHLD
+	 * handler to ignore the signals.
+	 */
+	setsighandler(SIGCHLD, sig_ignore);
+
 	if (opt_pid != -1) {
 		if (argc != 0)
 			usage("cannot specify both a process id and a command");
 		pts = ptrace_attach(opt_pid);
 
+		if (opt_outfile == NULL)
+			asprintf(&opt_outfile, "%u.prof", opt_pid);
 	}
 	else {
 		if (argc == 0)
@@ -118,16 +134,48 @@ main(int argc, char *argv[])
 			/* NOTREACHED */
 		}
 
+		if (opt_outfile == NULL)
+			asprintf(&opt_outfile, "%s.prof", *argv);
 	}
 
-	do {
+	optree_output_open();
+
+	/*
+	 * Install signal handlers to ensure we dump the collected data
+	 * before terminating.
+	 */
+	setsighandler(SIGHUP, sig_terminate);
+	setsighandler(SIGINT, sig_terminate);
+	setsighandler(SIGQUIT, sig_terminate);
+	setsighandler(SIGTERM, sig_terminate);
+
+	while (!terminate) {
 		ptrace_getregs(pts, &regs);
+
 		/* XXX MARK AS STACK(regs.r_esp) if regs.r_ss == regs.r_cs */
+
 		ptrace_read(pts, regs.r_eip, codebuf, sizeof(codebuf));
 		optree_update(codebuf, sizeof(codebuf), 0);
-	} while (ptrace_step(pts));
 
-	optree_output(stdout);
+		if (terminate || !ptrace_step(pts))
+			break;
+	}
+
+	optree_output();
+	warn("profile written to %s", opt_outfile);
+
+	/*
+	 * If we attached to an already running process (i.e. -p pid command
+	 * line option was used) and that process has not terminated, then
+	 * detach from it so it can continue running like it was before we
+	 * started tracing it.
+	 *
+	 * However, if the traced process is our child process, do not
+	 * detach from it if it is still running so that it is killed when
+	 * we exit.
+	 */
+	if (terminate && opt_pid > 0)
+		ptrace_detach(pts);
 
 	return 0;
 }
@@ -144,15 +192,33 @@ usage(const char *msg)
 	progname = getprogname();
 
 	fatal(EX_USAGE,
-		"usage: %s [-vz] [-f opcodefile] command\n"
-		"       %s [-vz] [-f opcodefile] -p pid\n",
+		"usage: %s [-vz] [-f opcodefile] [-o outputfile] command\n"
+		"       %s [-vz] [-f opcodefile] [-o outputfile] -p pid\n",
 		progname, progname
 	);
 }
 
 
 void
-sigchild(int sig __unused)
+setsighandler(int sig, void (*handler)(int))
+{
+	struct sigaction act;
+
+	act.sa_handler = handler;
+	act.sa_flags = SA_RESTART;
+	sigemptyset(&act.sa_mask);
+	sigaction(sig, &act, NULL);
+}
+
+
+void
+sig_ignore(int sig __unused)
 {
 }
 
+
+void
+sig_terminate(int sig __unused)
+{
+	terminate = true;
+}
