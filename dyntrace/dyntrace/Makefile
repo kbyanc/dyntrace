@@ -1,4 +1,4 @@
-# $kbyanc: dyntrace/dyntrace/Makefile,v 1.3 2004/12/15 18:06:42 kbyanc Exp $
+# $kbyanc: dyntrace/dyntrace/Makefile,v 1.4 2004/12/17 05:02:58 kbyanc Exp $
 
 PROG=		dynprof
 
@@ -11,7 +11,8 @@ SRCS=		log.c \
 		procfs_freebsd.c \
 		ptrace.c \
 		radix.c \
-		region.c
+		region.c \
+		target_freebsd.c
 
 NOMAN=		noman
 

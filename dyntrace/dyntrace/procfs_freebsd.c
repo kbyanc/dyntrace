@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.1 2004/12/15 04:29:52 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.2 2004/12/17 05:02:58 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -45,24 +45,10 @@
 #include "dynprof.h"
 
 
-#define	MAXMAPPINGS	32
-
-
-struct procfs_state {
-	pid_t	 pid;
-	int	 fd_mem;
-	int	 fd_map;
-
-	uint	 map_count;
-	void	*map_addr[MAXMAPPINGS];
-	size_t	 map_len[MAXMAPPINGS];
-};
-
 
 static bool	 procfs_initialized = false;
 static char	*procfs_path = NULL;
 
-static bool	 procfs_init(void);
 static bool	 procfs_isavailable(void);
 static bool	 procfs_ismounted(char **mountpointp);
 static bool	 procfs_isaccessable(const char *path);
@@ -72,129 +58,28 @@ static bool	 procfs_mount(const char *path);
 static void	 procfs_unmount(void);
 static void	 procfs_rmtmpdir(void);
 
+static int	 procfs_common_open(pid_t pid, const char *node);
+static void	 procfs_common_close(int *fdp);
 
-pfstate_t
-procfs_open(pid_t pid)
-{
-	pfstate_t pfs;
-
-	if (!procfs_initialized) {
-		procfs_init();
-		procfs_initialized = true;
-	}
-
-	if (procfs_path == NULL)
-		return NULL;
-
-	pfs = calloc(1, sizeof(*pfs));
-	if (pfs == NULL)
-		fatal(EX_OSERR, "malloc: %m");
-
-	pfs->pid = pid;
-	pfs->fd_mem = procfs_opennode(procfs_path, pid, "mem");
-	pfs->fd_map = procfs_opennode(procfs_path, pid, "map");
-
-	if (pfs->fd_mem < 0 || pfs->fd_map < 0)
-		procfs_done(&pfs);
-
-	return pfs;
-}
-
-
-void
-procfs_done(pfstate_t *pfsp)
-{
-	pfstate_t pfs = *pfsp;
-	uint i;
-
-	*pfsp = NULL;
-
-	for (i = 0; i < pfs->map_count; i++)
-		munmap(pfs->map_addr[i], pfs->map_len[i]);
-
-	close(pfs->fd_mem);
-	close(pfs->fd_map);
-}
-
-
-size_t
-procfs_read(pfstate_t pfs, vm_offset_t addr, void *dest, size_t len)
-{
-	ssize_t rv;
-
-	assert(pfs != NULL);
-
-	rv = pread(pfs->fd_mem, dest, len, addr);
-	if (rv < 0)
-		fatal(EX_OSERR, "read(procfs): %m");
-
-	return rv;
-}
-
-
-void *
-procfs_mmap(pfstate_t pfs, vm_offset_t addr, size_t len)
-{
-	void *ptr;
-	uint i;
-
-	assert(pfs != NULL);
-
-	i = pfs->map_count;
-	if (i == MAXMAPPINGS)
-		return NULL;
-
-	ptr = mmap(NULL, len, PROT_READ, MAP_NOCORE|MAP_SHARED,
-		   pfs->fd_mem, addr);
-
-	if (ptr == MAP_FAILED)
-		return NULL;
-
-	pfs->map_len[i] = len;
-	pfs->map_addr[i] = ptr;
-	pfs->map_count++;
-
-	return ptr;
-}
-
-
-void
-procfs_munmap(pfstate_t pfs, void *ptr, size_t len)
-{
-	uint nummaps;
-	uint i;
-
-	assert(pfs != NULL);
-
-	nummaps = pfs->map_count;
-
-	/*
-	 * Verify that the given pointer corresponds to one of our mappings.
-	 */
-	for (i = 0; i < nummaps; i++) {
-		if (pfs->map_addr[i] == ptr)
-			break;
-	}
-
-	assert(i != pfs->map_count);
-	assert(len == pfs->map_len[i]);
-
-	/*
-	 * Swap the last mapping into the removed mapping's array position.
-	 */
-	pfs->map_addr[i] = pfs->map_addr[nummaps];
-	pfs->map_len[i] = pfs->map_len[nummaps];
-	pfs->map_count--;
-
-	if (munmap(ptr, len) < 0)
-		fatal(EX_OSERR, "munmap: %m");
-}
 
 
 bool
 procfs_init(void)
 {
 
+	/*
+	 * If procfs_init() has already been called, then procfs_path will be
+	 * non-null (the path where we can access procfs) if procfs is
+	 * available.
+	 */
+	if (procfs_initialized)
+		return procfs_path != NULL;
+	procfs_initialized = true;
+
+	/*
+	 * Check to see if the kernel supports procfs and if it is mounted
+	 * somewhere accessable.
+	 */
 	if (!procfs_isavailable())
 		return false;
 
@@ -404,5 +289,121 @@ procfs_rmtmpdir(void)
 
 	free(procfs_path);
 	procfs_path = NULL;
+}
+
+
+
+
+int
+procfs_common_open(pid_t pid, const char *node)
+{
+
+	assert(pid >= 0);
+
+	if (!procfs_initialized)
+		procfs_init();
+
+	if (procfs_path == NULL)
+		return -1;
+
+	return procfs_opennode(procfs_path, pid, node);
+}
+
+
+void
+procfs_common_close(int *fdp)
+{
+	int fd = *fdp;
+
+	*fdp = -1;
+	if (fd >= 0)
+		close(fd);
+}
+
+
+int
+procfs_map_open(pid_t pid)
+{
+	return procfs_common_open(pid, "map");
+}
+
+
+void
+procfs_map_close(int *pmapfdp)
+{
+	procfs_common_close(pmapfdp);
+}
+
+
+void
+procfs_map_read(int pmapfd, void *destp, size_t *lenp)
+{
+	static uint8_t *buffer = NULL;
+	static size_t buflen = 4096;
+	uint8_t **dest = (uint8_t **)destp;
+	ssize_t rv;
+
+	assert(pmapfd >= 0);
+
+	if (buffer == NULL) {
+		buffer = malloc(buflen);
+		if (buffer == NULL)
+			fatal(EX_OSERR, "malloc: %m");
+	}
+
+	/*
+	 * The procfs map must be read atomically.  The only way to do that
+	 * is to allocate a buffer large enough to read the entire text
+	 * at once.  Luckily, if we try to read too little, procfs fails with
+	 * EFBIG so we know we need to try a larger buffer.
+	 * XXX There should probably be a limit on how much memory we
+	 *     allocate.
+	 */
+	for (;;) {
+		rv = pread(pmapfd, buffer, buflen, 0);
+
+		if (rv >= 0)
+			break;				/* Successful read. */
+
+		if (rv != EFBIG)
+			fatal(EX_OSERR, "read: %m");	/* Unexpected error. */
+
+		buflen <<= 1;
+		buffer = realloc(buffer, buflen);
+		if (buffer == NULL)
+			fatal(EX_OSERR, "realloc: %m");
+	}
+
+	*dest = buffer;
+	*lenp = rv;
+}
+
+
+int
+procfs_mem_open(pid_t pid)
+{
+	return procfs_common_open(pid, "mem");
+}
+
+
+void
+procfs_mem_close(int *pmemfdp)
+{
+	procfs_common_close(pmemfdp);
+}
+
+
+size_t
+procfs_mem_read(int pmemfd, vm_offset_t addr, void *dest, size_t len)
+{
+	ssize_t rv;
+
+	assert(pmemfd >= 0);
+
+	rv = pread(pmemfd, dest, len, addr);
+	if (rv < 0)
+		fatal(EX_OSERR, "read(procfs): %m");
+
+	return rv;
 }
 

@@ -23,12 +23,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.10 2004/12/15 18:06:42 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.11 2004/12/17 05:02:58 kbyanc Exp $
  */
 
 #include <sys/types.h>
 #include <sys/time.h>
 
+#include <assert.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <signal.h>
@@ -37,19 +38,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <machine/reg.h>
-
 #include "dynprof.h"
 
 #define	DEFAULT_CHECKPOINT	(15 * 60)	/* 15 minutes */
 
 
 static void	 usage(const char *msg);
-static struct procinfo *procinfo_new(ptstate_t pts);
-static void	 profile(void);
+static void	 profile(target_t targ);
 static uint	 rounddiv(uint64_t a, uint64_t b);
-static void	 setsighandler(int sig, void (*handler)(int));
-static void	 sig_ignore(int sig);
 static void	 sig_terminate(int sig);
 static void	 sig_checkpoint(int sig);
 
@@ -63,8 +59,6 @@ static bool	 checkpoint	= false;
 static pid_t	 opt_pid	= -1;
        char	*opt_outfile	= NULL;
        char	*opt_command	= NULL;
-
-static struct procinfo *proc	= NULL;
 
 
 void
@@ -88,7 +82,7 @@ usage(const char *msg)
 int
 main(int argc, char *argv[])
 {
-	ptstate_t pts;
+	target_t targ;
 	int ch;
 
 	if (argc == 1)
@@ -145,42 +139,25 @@ main(int argc, char *argv[])
 	if (opt_checkpoint == -1)
 		opt_checkpoint = DEFAULT_CHECKPOINT;
 
-	/*
-	 * The traced process receives a SIGTRAP each time it stops under the
-	 * control of ptrace(2).  However, as the tracing process, we have
-	 * the opportunity to intercept the (fatal) signal if we have a
-	 * SIGCHLD handler other than the default SIG_IGN.  Since we wait
-	 * for the child to stop with waitpid(2), we install our own SIGCHLD
-	 * handler to ignore the signals.
-	 */
-	setsighandler(SIGCHLD, sig_ignore);
+	target_init();
 
 	if (opt_pid != -1) {
 		if (argc != 0)
 			usage("cannot specify both a process id and a command");
-		pts = ptrace_attach(opt_pid);
 
-		if (opt_outfile == NULL)
-			asprintf(&opt_outfile, "%u.prof", opt_pid);
+		targ = target_attach(opt_pid);
 	}
 	else {
 		if (argc == 0)
 			usage("command not specified");
-		pts = ptrace_fork();
-		if (pts == NULL) {
-			/* Child process. */
-			execvp(*argv, argv);
-			fatal(EX_OSERR, "failed to executed \"%s\": %m", *argv);
-		}
 
-		if (opt_outfile == NULL)
-			asprintf(&opt_outfile, "%s.prof", basename(*argv));
+		targ = target_execvp(*argv, argv);
 	}
 
-	proc = procinfo_new(pts);
-	region_insert(proc, 1, 0xffffffff, REGION_UNKNOWN, false); /* XXX */
+	if (opt_outfile == NULL)
+		asprintf(&opt_outfile, "%s.prof", target_get_name(targ));
 
-	profile();
+	profile(targ);
 
 	/*
 	 * If we attached to an already running process (i.e. -p pid command
@@ -193,37 +170,32 @@ main(int argc, char *argv[])
 	 * we exit.
 	 */
 	if (terminate && opt_pid > 0)
-		ptrace_detach(pts);
+		target_detach(&targ);
+
+	target_done();
 
 	return 0;
 }
 
 
-struct procinfo *
-procinfo_new(ptstate_t pts)
+#if 0
+void
+trace_update(target_t targ, vm_offset_t pc, uint n, uint cycles)
 {
-	struct procinfo *proc;
 
-	proc = calloc(1, sizeof(*proc));
-	if (proc == NULL)
-		fatal(EX_OSERR, "malloc: %m");
+	assert(n > 0);
 
-	proc->pid = hack(pts);
-	proc->pts = pts;
-	proc->pfs = procfs_open(proc->pid);
-
-	return proc;
 }
+#endif
 
 
 void
-profile(void)
+profile(target_t targ)
 {
 	struct timeval starttime, stoptime;
 	char timestr[64];
 	time_t seconds;
 	uint64_t instructions;
-	struct reg regs;
 
 	optree_output_open();
 	warn("recording results to %s", opt_outfile);
@@ -260,14 +232,10 @@ profile(void)
 
 	instructions = 0;
 	while (!terminate) {
+		vm_offset_t pc = target_get_pc(targ);
+		region_t region = target_get_region(targ, pc);
 
-#if 0
-		procfs_loadmap(proc);
-#endif
-
-		ptrace_getregs(proc->pts, &regs);
-
-		optree_update(proc, regs.r_eip, 0);
+		optree_update(targ, region, pc, 0);
 		instructions++;
 
 		/*
@@ -282,7 +250,7 @@ profile(void)
 			checkpoint = false;
 		}
 
-		if (terminate || !ptrace_step(proc->pts))
+		if (terminate || !target_step(targ))
 			break;
 	}
 
@@ -331,12 +299,6 @@ setsighandler(int sig, void (*handler)(int))
 	act.sa_flags = SA_RESTART;
 	sigemptyset(&act.sa_mask);
 	sigaction(sig, &act, NULL);
-}
-
-
-void
-sig_ignore(int sig __unused)
-{
 }
 
 

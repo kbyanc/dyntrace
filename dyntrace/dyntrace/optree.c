@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.9 2004/12/14 06:02:26 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.10 2004/12/17 05:02:58 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -289,25 +289,26 @@ optree_lookup(const void *keyptr)
 
 
 void
-optree_update(struct procinfo *proc, vm_offset_t pc, uint cycles)
+optree_update(target_t targ, region_t region, vm_offset_t pc, uint cycles)
 {
 	struct OpTreeNode *node;
 	struct Prefix *prefix;
 	struct Opcode *op;
 	struct counter *c;
-	region_t region;
+	region_type_t regiontype;
 	prefixmask_t prefixmask = PREFIXMASK_EMPTY;
 	uint32_t text;
 
-	/* Cache the region; a single instruction should never cross regions. */
-	region = region_lookup(proc, pc);
+	assert(region != NULL);
+
+	regiontype = region_get_type(region);
 
 	/*
 	 * First, build mask of all prefixes before the opcode.
 	 */
 	for (;;) {
 		text = 0;
-		region_read(proc, region, pc, &text, sizeof(text));
+		region_read(targ, region, pc, &text, sizeof(text));
 
 		node = optree_lookup(&text);
 		assert(node != NULL);

@@ -23,16 +23,25 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/region.c,v 1.2 2004/12/15 18:06:42 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/region.c,v 1.3 2004/12/17 05:02:58 kbyanc Exp $
  */
 
 #include <sys/types.h>
+#include <sys/queue.h>
 
 #include <assert.h>
 #include <stdlib.h>
 #include <sysexits.h>
 
 #include "dynprof.h"
+
+
+/*
+ * Minimum and maximum number of bytes to cache per region of the target
+ * process's address space.
+ */
+#define	REGION_BUFFER_MINSIZE	32
+#define	REGION_BUFFER_MAXSIZE	1024*1024
 
 
 struct region_info {
@@ -43,7 +52,6 @@ struct region_info {
 
 	region_type_t	 type;
 	bool		 readonly;
-	bool		 use_mmap;
 
 	vm_offset_t	 bufaddr;	/* First address cached. */
 	size_t		 buflen;	/* Bytes in cache buffer. */
@@ -51,26 +59,81 @@ struct region_info {
 	size_t		 bufsize;	/* Memory allocated to buffer. */
 };
 
+struct region_info region_unknown_data = {
+	{ NULL, NULL },
+	.start	  = 0,
+	.end	  = -1,
+	.type	  = REGION_UNKNOWN,
+	.readonly = false,
+	.bufaddr  = 0,
+	.buflen   = 0,
+	.buffer   = NULL,
+	.bufsize  = 0
+};
+region_t region_unknown = &region_unknown_data;
+
+
+struct region_list {
+	LIST_HEAD(, region_info) head;	/* List of regions. */
+};
+
 
 static void	 region_remove(region_t *regionp);
 
 
+region_list_t
+region_list_new(void)
+{
+	region_list_t rlist;
+
+	rlist = malloc(sizeof(*rlist));
+	if (rlist == NULL)
+		fatal(EX_OSERR, "malloc: %m");
+
+	LIST_INIT(&rlist->head);
+	return rlist;
+}
+
+
+void
+region_list_done(region_list_t *rlistp)
+{
+	region_list_t rlist = *rlistp;
+	region_t region;
+
+	*rlistp = NULL;
+
+	while (!LIST_EMPTY(&rlist->head)) {
+		region = LIST_FIRST(&rlist->head);
+		region_remove(&region);
+	}
+
+	free(rlist);
+}
+
 
 region_t
-region_lookup(struct procinfo *proc, vm_offset_t offset)
+region_lookup(region_list_t rlist, vm_offset_t offset)
 {
 	region_t region;
 
-	LIST_FOREACH(region, &proc->region_list, link) {		
-		if (region->start <= offset && region->end >= offset)
+	LIST_FOREACH(region, &rlist->head, link) {		
+		if (region->start <= offset && region->end > offset)
 			break;
 	}
 
-	if (region == LIST_FIRST(&proc->region_list) || region == NULL)
+	if (region == NULL)
+		return region_unknown;
+
+	if (region == LIST_FIRST(&rlist->head))
 		return region;
 
+	/*
+	 * Move the matched region to the head of the list to take advantage of
+	 * the locality of reference in the traced code.
+	 */
 	LIST_REMOVE(region, link);
-	LIST_INSERT_HEAD(&proc->region_list, region, link);
+	LIST_INSERT_HEAD(&rlist->head, region, link);
 
 	return region;
 }
@@ -89,10 +152,12 @@ region_remove(region_t *regionp)
 
 
 void
-region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
+region_update(region_list_t rlist, vm_offset_t start, vm_offset_t end,
 	      region_type_t type, bool readonly)
 {
 	region_t region;
+
+	assert(end > start);
 
 	/*
 	 * Lookup any existing regions which contain the new regions' start
@@ -101,7 +166,7 @@ region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
 	 * of the old region in the list so it will effectively "block" it.
 	 * This isn't ideal, but works as a time versus memory tradeoff.
 	 */
-	while ((region = region_lookup(proc, start)) != NULL) {
+	while ((region = region_lookup(rlist, start)) != NULL) {
 
 		/*
 		 * If the new region exactly matches or is an extension of an
@@ -110,6 +175,7 @@ region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
 		 */
 		if (region->start == start && region->end <= end &&
 		    region->type == type && region->readonly == readonly) {
+			debug("XXXTEMP extending region 0x%08x", start);
 			region->end = end;
 			return;
 		}
@@ -117,6 +183,7 @@ region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
 		/*
 		 * Remove any regions that overlap the start address.
 		 */
+		debug("XXXTEMP removing region %0x08x", start);
 		region_remove(&region);
 	}
 
@@ -130,82 +197,65 @@ region_insert(struct procinfo *proc, vm_offset_t start, vm_offset_t end,
 	if (region == NULL)
 		fatal(EX_OSERR, "malloc: %m");
 
-	LIST_INSERT_HEAD(&proc->region_list, region, link);
+	LIST_INSERT_HEAD(&rlist->head, region, link);
 
 	region->start = start;
 	region->end = end;
 	region->readonly = readonly;
 
-	/* Default buffer size. XXX Explain why this size. */
-	region->bufsize = 16;
-
-	if (proc->pfs != NULL) {
-		region->use_mmap = true;
-
-		if (REGION_IS_TEXT(region->type))
-			region->bufsize = 1024 * 1024;
-		else
-			region->bufsize = 65536;
-
-		region->bufsize = 4096; /* XXXTMP */
-
+	if (!readonly)
 		return;
-	}
 
+	/*
+	 * The region is read-only so we can cache the memory contents to
+	 * save a call to the kernel for every instruction.  We cache the
+	 * minimum amount unless the region is a text segment, in which case
+	 * it is highly probable for code to be executed there so we cache
+	 * more.
+	 */
+	region->bufsize = REGION_BUFFER_MINSIZE;
+
+	if (REGION_IS_TEXT(region->type))
+		region->bufsize = REGION_BUFFER_MAXSIZE;
+
+	if (region->bufsize > end - start)
+		region->bufsize = end - start;
+
+	/*
+	 * Allocate buffer to cache the region's contents.  If the allocation
+	 * fails, just pretend the region isn't read-only.  This will likely
+	 * reduce throughput of the profiler, but will allow it to continue
+	 * to run without impacting the results.
+	 */
 	region->buffer = malloc(region->bufsize);
-	if (region->buffer == NULL)
-		fatal(EX_OSERR, "malloc: %m");
+	if (region->buffer == NULL) {
+		warn("malloc: %m (non-fatal)");
+		region->readonly = false;
+	}
 }
 
 
 size_t
-region_read(struct procinfo *proc, region_t region, vm_offset_t addr,
+region_read(target_t targ, region_t region, vm_offset_t addr,
 	    void *dest, size_t len)
 {
+	vm_offset_t start;
 	ssize_t offset;
 
 	assert(len > 0);
 	assert(addr + len <= region->end);
-
-	offset = addr - region->bufaddr;
-
-	if (region->use_mmap) {
-		vm_offset_t start;
-
-		assert(proc->pfs != NULL);
-
-		if (offset >= 0 && offset + len <= region->buflen) {
-			memcpy(dest, region->buffer + offset, len);
-			return len;
-		}
-
-		if (region->buffer != NULL)
-			procfs_munmap(proc->pfs, region->buffer, region->buflen);
-
-		start = addr - (region->bufsize / 2);
-		if (start < region->start)
-			start = region->start;
-
-		region->buffer = procfs_mmap(proc->pfs, start, region->bufsize);
-		region->bufaddr = start;
-		region->buflen = region->bufsize;
-
-		offset = addr - region->bufaddr;
-		assert(offset + len <= region->buflen);
-		memcpy(dest, region->buffer + offset, len);
-		return len;
-	}
 
 	/*
 	 * If the region is not readonly, we cannot cache the memory contents
 	 * as they may change (e.g. self-modifying code).  So we have to ask
 	 * the kernel to supply the memory contents every time.
 	 */
-	if (!region->readonly) {
-		return ptrace_read(proc->pts, addr, dest, len);
-	}
+	if (!region->readonly)
+		return target_read(targ, addr, dest, len);
 
 	assert(region->buffer != NULL);
+
+	offset = addr - region->bufaddr;
 
 	/*
 	 * Satisfy the request from the region's cache if we can.
@@ -217,15 +267,42 @@ region_read(struct procinfo *proc, region_t region, vm_offset_t addr,
 
 	/*
 	 * Reload the region's cache.
+	 * We start the region cache slightly before the requested addr
+	 * so that simple loops do not cause spurious cache misses.
 	 */
-	region->buflen = ptrace_read(proc->pts, addr, region->buffer,
+	offset = region->bufsize / 4;
+	start = (addr < (size_t)offset) ? 0 : addr + len - offset;
+	assert(start + region->bufsize >= addr + len);
+
+	region->buflen = target_read(targ, start, region->buffer,
 				     region->bufsize);
-	region->bufaddr = addr;
+	region->bufaddr = start;
 
-	/* We cannot read more than what fits in our cache. */
-	if (len > region->buflen)
-		len = region->buflen;
+	offset = addr - start;
+	assert(offset > 0);
 
-	memcpy(dest, region->buffer, len);
+	memcpy(dest, region->buffer + offset, len);
 	return len;
+}
+
+
+region_type_t
+region_get_type(region_t region)
+{
+	return region->type;
+}
+
+
+size_t
+region_get_range(region_t region, vm_offset_t *startp, vm_offset_t *endp)
+{
+
+	assert(region != NULL);
+
+	if (*startp != NULL)
+		*startp = region->start;
+	if (*endp != NULL)
+		*endp = region->end;
+
+	return (region->end - region->start);
 }
