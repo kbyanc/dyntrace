@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.11 2004/12/19 11:13:36 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/dyntrace.h,v 1.12 2004/12/22 09:24:49 kbyanc Exp $
  */
 
 #ifndef _INCLUDE_DYNPROF_H
@@ -119,6 +119,7 @@ extern size_t	 target_read(target_t targ, vm_offset_t addr,
 			     void *dest, size_t len);
 
 extern vm_offset_t target_get_pc(target_t targ);
+extern uint	 target_get_cycles(target_t targ);
 extern const char *target_get_name(target_t targ);
 extern region_t	 target_get_region(target_t targ, vm_offset_t offset);
 
