@@ -23,11 +23,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.4 2004/11/29 11:57:55 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.5 2004/11/30 21:04:05 kbyanc Exp $
  */
 
 #include <sys/types.h>
 
+#include <libgen.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <sysexits.h>
@@ -135,7 +136,7 @@ main(int argc, char *argv[])
 		}
 
 		if (opt_outfile == NULL)
-			asprintf(&opt_outfile, "%s.prof", *argv);
+			asprintf(&opt_outfile, "%s.prof", basename(*argv));
 	}
 
 	optree_output_open();
