@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.3 2004/12/17 04:47:54 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.4 2004/12/17 21:28:30 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -167,7 +167,7 @@ ptrace_detach(ptstate_t pts)
 
 	assert(pts->status == ATTACHED);
 
-	if (ptrace(PT_DETACH, pts->pid, 0, 0) < 0)
+	if (ptrace(PT_DETACH, pts->pid, (caddr_t)1, 0) < 0)
 		warn("failed to detach from %u: %m", pts->pid);
 	pts->status = DETACHED;
 	pts->signum = 0;
