@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.5 2004/11/29 11:57:55 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.6 2004/12/01 03:29:36 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -175,11 +175,11 @@ static bool	 optree_insert(struct OpTreeNode *op);
 static struct OpTreeNode *optree_lookup(const void *keyptr);
 static int	 optree_print_node(struct radix_node *rn, void *arg);
 
+static struct Opcode *opcode_alloc(void);
 static void	 opcode_parse(xmlNode *node);
 static void	 opcode_free(struct Opcode **opp);
 
 static const char *prefix_string(prefixmask_t prefixmask);
-static void	 prefix_output(const struct Prefix *prefix);
 static void	 prefix_parse(xmlNode *node);
 static void	 prefix_free(struct Prefix **prefixp);
 
@@ -194,6 +194,7 @@ static void	 parse_bitmask(const char *bitstr,
 void
 optree_init(void)
 {
+	struct Opcode *op;
 
 	assert(op_rnh == NULL);
 
@@ -207,6 +208,17 @@ optree_init(void)
 	rn_inithead((void **)&op_rnh, offsetof(struct bitval, val));
 
 	assert(op_rnh != NULL);
+
+	/*
+	 * Add a catch-all default opcode entry.
+	 */
+	op = opcode_alloc();
+	op->bitmask = strdup("");
+	op->mneumonic = strdup("(unknown)");
+	op->detail = NULL;
+	op->node.match.len = op->node.mask.len = 0;
+	op_rnh->rnh_addaddr(&op->node.match, &op->node.mask, op_rnh,
+			    (void *)op);
 }
 
 
@@ -338,6 +350,22 @@ optree_update(const uint8_t *pc, size_t len, unsigned int cycles)
 		c->cycles_min = cycles;
 	else if (cycles > c->cycles_max)
 		c->cycles_max = cycles;
+
+	/*
+	 * Warn about instructions which match the default opcode.
+	 * In order to reduce verbosity, we only print the warning when
+	 * the current program counter differs from the last program counter
+	 * at which we found an unknown opcode.
+	 */
+	if (op->node.match.len == 0) {
+		static const uint8_t *prevpc = NULL;
+		if (pc != prevpc) {
+			warn("unknown opcode at pc %p: 0x%02x%02x%02x%02x",
+			     pc, pc[0], pc[1], pc[2], pc[3]);
+			prevpc = pc;
+		}
+	}
+
 	return;
 
 toolong:
@@ -365,6 +393,7 @@ optree_output_open(void)
 void
 optree_output(void)
 {
+	const struct Prefix *prefix;
 	uint i;
 
 	assert(writer != NULL);
@@ -375,8 +404,15 @@ optree_output(void)
 	xmlTextWriterStartElement(writer, "dynprof");
 
 	/* First, output a list of prefixes. */
-	for (i = 0; i < prefix_count; i++)
-		prefix_output(&prefix_index[i]);
+	for (i = 0; i < prefix_count; i++) {
+		prefix = &prefix_index[i];
+		xmlTextWriterStartElement(writer, "prefix");
+		xmlTextWriterWriteAttribute(writer, "id",
+					    prefix_string(prefix->mask));
+		xmlTextWriterWriteAttribute(writer, "bitmask", prefix->bitmask);
+		xmlTextWriterWriteAttribute(writer, "detail", prefix->detail);
+		xmlTextWriterEndElement(writer /* prefix */);
+	}
 
 	xmlTextWriterStartElement(writer, "region");
 	xmlTextWriterWriteAttribute(writer, "type", "all");
@@ -398,6 +434,7 @@ prefix_string(prefixmask_t prefixmask)
 {
 	static char buffer[100];
 	size_t len;
+	prefixmask_t checkmask;
 	int id;
 
 	/* No instruction prefix is the most common case. */
@@ -406,9 +443,13 @@ prefix_string(prefixmask_t prefixmask)
 
 	len = 0;
 
-	for (id = 0; prefixmask != 0; id++, prefixmask >>= 1) {
+	for (id = 0, checkmask = 1; prefixmask != 0; id++, checkmask <<= 1) {
 		char idstr[3] = { 'A', '\0', '\0' };
 		size_t idstrlen = 1;
+
+		if ((prefixmask & checkmask) == 0)
+			continue;
+		prefixmask &= ~checkmask;
 
 		if (id < 26)
 			idstr[0] += id;
@@ -536,9 +577,7 @@ opcode_parse(xmlNode *node)
 	const xmlAttr *attr;
 	struct Opcode *op;
 
-	op = calloc(1, sizeof(*op));
-	if (op == NULL)
-		fatal(EX_OSERR, "malloc: %m");
+	op = opcode_alloc();
 
 	for (attr = node->properties; attr != NULL; attr = attr->next) {
 		const char *name = attr->name;
@@ -564,17 +603,30 @@ opcode_parse(xmlNode *node)
 		      XML_GET_LINE(node));
 	}
 
+	parse_bitmask(op->bitmask, &op->node.mask.val, &op->node.match.val);
+
+	if (!optree_insert(&op->node)) {
+		opcode_free(&op);
+	}
+}
+
+
+struct Opcode *
+opcode_alloc(void)
+{
+	struct Opcode *op;
+
+	op = calloc(1, sizeof(*op));
+	if (op == NULL)
+		fatal(EX_OSERR, "malloc: %m");
+
 	op->count_end = &op->count_head;
 
 	op->node.type = OPCODE;
 	op->node.mask.len = sizeof(op->node.mask);
 	op->node.match.len = sizeof(op->node.match);
 
-	parse_bitmask(op->bitmask, &op->node.mask.val, &op->node.match.val);
-
-	if (!optree_insert(&op->node)) {
-		opcode_free(&op);
-	}
+	return op;
 }
 
 
@@ -591,25 +643,6 @@ opcode_free(struct Opcode **opp)
 	if (op->detail != NULL)
 		free(op->detail);
 	free(op);
-}
-
-
-
-void
-prefix_output(const struct Prefix *prefix)
-{
-	char id[3] = { 'A', '\0', '\0' };
-
-	if (prefix->id < 26)
-		id[0] += prefix->id;
-	else
-		id[1] = 'A' + prefix->id - 26;
-
-	xmlTextWriterStartElement(writer, "prefix");
-	xmlTextWriterWriteAttribute(writer, "id", id);
-	xmlTextWriterWriteAttribute(writer, "bitmask", prefix->bitmask);
-	xmlTextWriterWriteAttribute(writer, "detail", prefix->detail);
-	xmlTextWriterEndElement(writer /* prefix */);
 }
 
 

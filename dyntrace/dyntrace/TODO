@@ -1,9 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.4 2004/11/29 12:03:19 kbyanc Exp $
-
- ** Send sample output to professor with progress update.
-
- * Add default "unknown" opcode to optree.
-   Both key and mask should be all zeros (match anything).
+$kbyanc: dyntrace/dyntrace/TODO,v 1.5 2004/12/01 03:29:36 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
