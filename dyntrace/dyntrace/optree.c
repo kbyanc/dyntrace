@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.7 2004/12/06 01:09:57 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.8 2004/12/08 03:35:23 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -537,7 +537,8 @@ optree_print_node(struct radix_node *rn, void *arg __unused)
 		xmlTextWriterWriteAttribute(writer, "prefixes",
 					    prefix_string(c->prefixmask));
 
-		snprintf(buffer, sizeof(buffer), "%qu", c->n);
+		snprintf(buffer, sizeof(buffer), "%llu",
+			 (unsigned long long)c->n);
 		xmlTextWriterWriteAttribute(writer, "n", buffer);
 
 		/* Only output cycle counts if we have them. */
@@ -546,7 +547,8 @@ optree_print_node(struct radix_node *rn, void *arg __unused)
 			continue;
 		}
 
-		snprintf(buffer, sizeof(buffer), "%qu", c->cycles_total);
+		snprintf(buffer, sizeof(buffer), "%llu",
+			 (unsigned long long)c->cycles_total);
 		xmlTextWriterWriteAttribute(writer, "cycles", buffer);
 
 		snprintf(buffer, sizeof(buffer), "%u", c->cycles_min);

@@ -23,15 +23,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/main.c,v 1.7 2004/12/06 01:09:57 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/main.c,v 1.8 2004/12/08 03:35:23 kbyanc Exp $
  */
 
 #include <sys/types.h>
 #include <sys/time.h>
 
+#include <inttypes.h>
 #include <libgen.h>
 #include <signal.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <sysexits.h>
 #include <time.h>
@@ -46,7 +46,7 @@
 
 static void	 usage(const char *msg);
 static void	 profile(ptstate_t pts);
-static uint	 rounddiv(uintmax_t a, uintmax_t b);
+static uint	 rounddiv(uint64_t a, uint64_t b);
 static void	 setsighandler(int sig, void (*handler)(int));
 static void	 sig_ignore(int sig);
 static void	 sig_terminate(int sig);
@@ -199,7 +199,7 @@ profile(ptstate_t pts)
 	struct timeval starttime, stoptime;
 	char timestr[64];
 	time_t seconds;
-	uintmax_t instructions;
+	uint64_t instructions;
 	uint8_t codebuf[16];
 	struct reg regs;
 
@@ -280,9 +280,9 @@ profile(ptstate_t pts)
 		ips = rounddiv(instructions * 1000000,
 			       (stoptime.tv_sec * 1000) +
 			       rounddiv(stoptime.tv_usec, 1000));
-		debug("%ju instructions profiled in "
+		debug("%llu instructions profiled in "
 		      "%0lu.%03u seconds (%0u.%03u/sec)",
-		      instructions,
+		      (unsigned long long)instructions,
 		      stoptime.tv_sec, rounddiv(stoptime.tv_usec, 1000),
 		      ips / 1000, ips % 1000);
 	}
@@ -292,7 +292,7 @@ profile(ptstate_t pts)
 
 
 uint
-rounddiv(uintmax_t a, uintmax_t b)
+rounddiv(uint64_t a, uint64_t b)
 {
 	return (a + (b / 2)) / b;
 }
