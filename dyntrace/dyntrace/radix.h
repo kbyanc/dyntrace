@@ -28,6 +28,7 @@
  *
  *	@(#)radix.h	8.2 (Berkeley) 10/31/94
  * $FreeBSD: src/sys/net/radix.h,v 1.25 2004/04/18 11:48:35 luigi Exp $
+ * $kbyanc: dyntrace/dyntrace/radix.h,v 1.2 2004/10/18 18:38:45 kbyanc Exp $
  */
 
 #ifndef _RADIX_H_
@@ -151,6 +152,8 @@ struct radix_node_head {
 #define	RADIX_NODE_HEAD_DESTROY(rnh)	mtx_destroy(&(rnh)->rnh_mtx)
 #define	RADIX_NODE_HEAD_LOCK_ASSERT(rnh) mtx_assert(&(rnh)->rnh_mtx, MA_OWNED)
 #endif /* _KERNEL */
+
+extern int max_keylen;
 
 void	 rn_init(void);
 int	 rn_inithead(void **, int);
