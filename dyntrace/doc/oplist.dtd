@@ -1,18 +1,22 @@
 <!--
 	DTD describing opcode list used by dynprof utility.
 
-	$kbyanc: dyntrace/doc/oplist.dtd,v 1.1 2004/09/20 20:09:05 kbyanc Exp $
+	$kbyanc: dyntrace/doc/oplist.dtd,v 1.2 2004/11/28 00:21:23 kbyanc Exp $
   -->
 
-<!ELEMENT oplist	(op+)>
+<!ELEMENT oplist	(prefix*, op+)>
+<!ELEMENT prefix	EMPTY>
 <!ELEMENT op		(arg*, description)>
 <!ELEMENT arg		EMPTY>
 <!ELEMENT description	(#PCDATA)>
 
-<!ATTLIST op	bitmask	    CDATA #REQUIRED>
-<!ATTLIST op	mneumonic   CDATA #REQUIRED>
-<!ATTLIST op	detail	    CDATA #IMPLIED>
-<!ATTLIST op	conditional CDATA #IMPLIED>
+<!ATTLIST prefix	bitmask		CDATA #REQUIRED>
+<!ATTLIST prefix	detail		CDATA #REQUIRED>
 
-<!ATTLIST arg	direction   CDATA #REQUIRED>
-<!ATTLIST arg	type	    CDATA #REQUIRED>
+<!ATTLIST op		bitmask		CDATA #REQUIRED>
+<!ATTLIST op		mneumonic	CDATA #REQUIRED>
+<!ATTLIST op		detail		CDATA #IMPLIED>
+<!ATTLIST op		conditional	CDATA #IMPLIED>
+
+<!ATTLIST arg		direction	CDATA #REQUIRED>
+<!ATTLIST arg		type		CDATA #REQUIRED>
