@@ -1,4 +1,4 @@
-$kbyanc: dyntrace/dyntrace/TODO,v 1.6 2004/12/06 01:11:33 kbyanc Exp $
+$kbyanc: dyntrace/dyntrace/TODO,v 1.7 2004/12/17 04:40:07 kbyanc Exp $
 
  * FreeBSD kernel modification to virtualize perfmon counters.
 
@@ -22,3 +22,18 @@ $kbyanc: dyntrace/dyntrace/TODO,v 1.6 2004/12/06 01:11:33 kbyanc Exp $
  * Port to Solaris.
 
  * Man page.
+
+ * Optimization:
+   For readonly regions, only record the pc and cycle count into an array
+   each step.  Then, after some time, sort the array by pc and then iterate
+   over it, updating the optree.  The idea is that if the region is readonly
+   then it is safe to examine the memory later to determine what instructions
+   are at each address.  As a result, we can reorder the addresses to better
+   exploit caching, reducing the number of contexts switches.
+
+ * Optimization:
+   Kernel modification to record the pc and cycle count from the trap handler,
+   only stopping the traced process and waking the profiler when the array
+   becomes full.  Then we can use the optimization described above to parse
+   all of the instructions described by the array.
+   - Solaris appears to provide a similar interface in v9/sys/traptrace.h
