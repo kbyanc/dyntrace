@@ -1243,6 +1243,9 @@
     <op bitmask="1101100111110111" mneumonic="FINCSTP">
         <description>Increment Stack Pointer</description>
     </op>
+    <op bitmask="1101101111100011" mneumonic="FINIT">
+	<description>Initialize FPU</description>
+    </op>
     <op bitmask="11011011xx010" mneumonic="FIST" detail="32-bit memory">
         <arg direction="input" type="mem" />
         <arg direction="output" type="ST(i)" />
