@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.4 2004/12/17 21:28:30 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/ptrace.c,v 1.5 2004/12/18 09:44:18 kbyanc Exp $
  */
 
 #include <sys/types.h>
@@ -31,6 +31,7 @@
 #include <sys/wait.h>
 
 #include <assert.h>
+#include <ctype.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -51,10 +52,29 @@ struct ptrace_state {
 
 static bool	 ptrace_initialized = false;
 
+static const char *ptrace_signal_name(int sig);
 static void	 ptrace_sig_ignore(int sig);
 static ptstate_t ptrace_alloc(pid_t pid);
 static bool	 ptrace_wait(struct ptrace_state *pts);
 
+
+const char *
+ptrace_signal_name(int sig)
+{
+	static char buffer[20];
+	char *pos;
+
+	buffer[sizeof(buffer) - 1] = '\0';
+
+	if (sig >= 0 && sig < NSIG) {
+		snprintf(buffer, sizeof(buffer) - 1, "sig%s", sys_signame[sig]);
+		for (pos = buffer; *pos != '\0'; pos++)
+			*pos = toupper(*pos);
+	} else
+		snprintf(buffer, sizeof(buffer) - 1, "signal #%d", sig);
+
+	return buffer;
+}
 
 
 void
@@ -190,8 +210,10 @@ ptrace_step(ptstate_t pts)
 
 	assert(pts->status == ATTACHED);
 
-	if (pts->signum != 0)
-		debug("sending signum %u to %u", pts->signum, pts->pid);
+	if (pts->signum != 0) {
+		debug("sending %s to %u",
+		      ptrace_signal_name(pts->signum), pts->pid);
+	}
 
 	if (ptrace(PT_STEP, pts->pid, (caddr_t)1, pts->signum) < 0)
 		fatal(EX_OSERR, "ptrace(PT_STEP, %u): %m", pts->pid);
@@ -205,8 +227,10 @@ ptrace_continue(ptstate_t pts)
 
 	assert(pts->status == ATTACHED);
 
-	if (pts->signum != 0)
-		debug("sending signum %u to %u", pts->signum, pts->pid);
+	if (pts->signum != 0) {
+		debug("sending %s to %u",
+		      ptrace_signal_name(pts->signum), pts->pid);
+	}
 
 	if (ptrace(PT_CONTINUE, pts->pid, (caddr_t)1, pts->signum) < 0)
 		fatal(EX_OSERR, "ptrace(PT_CONTINUE, %u): %m", pts->pid);
@@ -243,8 +267,8 @@ ptrace_wait(ptstate_t pts)
 	}
 
 	if (WIFSIGNALED(status)) {
-		warn("pid %u exited on signal %u", pts->pid,
-		     WTERMSIG(status));
+		warn("pid %u exited on %s", pts->pid,
+		     ptrace_signal_name(WTERMSIG(status)));
 		pts->status = TERMINATED;
 		return false;
 	}
