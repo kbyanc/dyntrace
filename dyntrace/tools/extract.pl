@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $kbyanc: dyntrace/tools/extract.pl,v 1.6 2004/11/28 00:23:28 kbyanc Exp $
+# $kbyanc: dyntrace/tools/extract.pl,v 1.7 2004/12/18 03:26:50 kbyanc Exp $
 #
 
 #
@@ -243,6 +243,13 @@ sub ParseOp($$$$$) {
 	# These characters are indicative of a false match while scanning.
 	return if ($bitstr =~ /[=\.]/o);
 
+	# Fix instances of words with superfluous spaces injected
+	# between the letters.
+	foreach my $word qw(reg memory) {
+		my $pattern = join('\s?', split('', $word));
+		$detail =~ s!$pattern!$word!g;
+	}
+
 	# Save the 'original' detail string to include the final output.
 	my $orig_detail = $detail;
 
@@ -273,13 +280,6 @@ sub ParseOp($$$$$) {
 	goto extract_args unless ($detail);
 
 cleanup_detail:
-
-	# Fix instances of words with superfluous spaces injected
-	# between the letters.
-	foreach my $word qw(reg memory) {
-		my $pattern = join('\s?', split('', $word));
-		$detail =~ s!$pattern!$word!g;
-	}
 
 	$detail =~ s!\bimm(ediate)!$IMMEDIATE!go;
 	$detail =~ s!\bsegment reg(ister)?(\s?[CDEFGS]S,?)*!$REG_SEGMENT!go;
