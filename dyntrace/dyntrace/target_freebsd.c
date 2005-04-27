@@ -23,8 +23,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.8 2004/12/23 01:45:19 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.9 2005/04/27 02:53:50 kbyanc Exp $
  */
+
+#include "config.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,9 +43,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#if HAVE_PMC
+#if HAVE_LIBPMC
 #include <pmc.h>
-#if __i386__
+#if __i386__ || __amd64__
 #include <machine/cpufunc.h>		/* for rdpmc() */
 #endif
 #endif
@@ -61,7 +63,7 @@ struct target_state {
 	ptstate_t	 pts;		/* ptrace(2) state. */
 	region_list_t	 rlist;		/* memory regions in process VM. */
 
-#if HAVE_PMC
+#if HAVE_LIBPMC
 	pmc_id_t	 pmc;		/* handle for PMC for cycle counts. */
 	uint32_t	 pmc_regnum;	/* x86 MSR number. */
 	pmc_value_t	 cycles;	/* cycle counter. */
@@ -95,26 +97,36 @@ target_init(void)
 	if (kq < 0)
 		fatal(EX_OSERR, "kqueue: %m");
 
-#if HAVE_PMC
-	pmc_avail = (pmc_init() >= 0);
-	if (pmc_avail) {
+#if HAVE_LIBPMC
+	if (pmc_init() >= 0) {
 		const struct pmc_op_getcpuinfo *cpuinfo;
+		enum pmc_class pmclass;
+		uint i;
 
 		if (pmc_cpuinfo(&cpuinfo) < 0)
 			fatal(EX_OSERR, "pmc_cpuinfo: %m");
 
-		switch (cpuinfo->pm_cputype) {
-		case PMC_CPU_INTEL_PIV:
-			pmc_eventname = "p4-global-power-events,usr";
-			break;
+		for (i = 0; i < cpuinfo->pm_nclass; i++) {
+			pmclass = cpuinfo->pm_classes[i];
 
-		case PMC_CPU_INTEL_PPRO:
-			pmc_eventname = "ppro-cpu-clk-unhalted,usr";
-			break;
-
-		default:
-			pmc_avail = false;
+			if (pmclass == PMC_CLASS_P4) {
+				/* Intel Pentium 4 */
+				pmc_eventname = "p4-global-power-events,usr";
+				break;
+			}
+			else if (pmclass == PMC_CLASS_P5) {
+				/* Intel Pentium */
+				pmc_eventname = "p5-number-of-cycles-not-in-halt-state,usr";
+				break;
+			}
+			else if (pmclass == PMC_CLASS_P6) {
+				/* Intel Pentium Pro, II, III, M */
+				pmc_eventname = "p6-cpu-clk-unhalted,usr";
+				break;
+			}
 		}
+
+		pmc_avail = (pmc_eventname != NULL);
 	}
 #endif
 	if (!pmc_avail)
@@ -186,7 +198,7 @@ target_new(pid_t pid, ptstate_t pts, char *procname)
 	if (kevent(kq, &kev, 1, NULL, 0, NULL) < 0)
 		fatal(EX_OSERR, "kevent: %m");
 
-#if HAVE_PMC
+#if HAVE_LIBPMC
 	if (pmc_avail) {
 		if (pmc_allocate(strdup(pmc_eventname),
 				 PMC_MODE_TC, 0, PMC_CPU_ANY, &targ->pmc) < 0)
@@ -195,15 +207,15 @@ target_new(pid_t pid, ptstate_t pts, char *procname)
 			fatal(EX_OSERR, "pmc_attach: %m");
 		if (pmc_rw(targ->pmc, 0, &targ->cycles) < 0)
 			fatal(EX_OSERR, "pmc_rw: %m");
-#if __i386__
+#if __i386__ || __amd64__
 		/*
 		 * On the x86 line of chips (Pentium and later) we can read
 		 * the performance counter from userland using the rdpmc
 		 * instruction, eliminating a context switch.  We just need
 		 * to know which register our performance counter is in...
 		 */
-		if (pmc_i386_get_msr(targ->pmc, &targ->pmc_regnum) < 0)
-			fatal(EX_OSERR, "pmc_i386_get_msr: %m");
+		if (pmc_x86_get_msr(targ->pmc, &targ->pmc_regnum) < 0)
+			fatal(EX_OSERR, "pmc_x86_get_msr: %m");
 #endif
 		if (pmc_start(targ->pmc) < 0)
 			fatal(EX_OSERR, "pmc_start: %m");
@@ -266,7 +278,7 @@ target_detach(target_t *targp)
 
 	*targp = NULL;
 
-#if HAVE_PMC
+#if HAVE_LIBPMC
 	if (pmc_avail) {
 		pmc_stop(targ->pmc);
 		pmc_release(targ->pmc);
@@ -359,11 +371,11 @@ uint
 target_get_cycles(target_t targ)
 {
 
-#ifdef HAVE_PMC
+#ifdef HAVE_LIBPMC
 	if (pmc_avail) {
 		pmc_value_t cycles_prev = targ->cycles;
 
-#if __i386__
+#if __i386__ || __amd64__
 		targ->cycles = rdpmc(targ->pmc_regnum);
 #else
 		if (pmc_read(targ->pmc, &targ->cycles) < 0)
@@ -374,7 +386,7 @@ target_get_cycles(target_t targ)
 	}
 #endif
 
-	(void)targ;	/* Silence gcc warning when !HAVE_PMC. */
+	(void)targ;	/* Silence gcc warning when !HAVE_LIBPMC. */
 	return 0;
 }
 

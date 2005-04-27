@@ -1,7 +1,7 @@
 #
 # Process this file with autoconf to produce a configure script.
 #
-# $kbyanc: dyntrace/configure.ac,v 1.2 2005/03/04 04:46:59 kbyanc Exp $
+# $kbyanc: dyntrace/configure.ac,v 1.3 2005/04/27 02:53:46 kbyanc Exp $
 
 AC_PREREQ(2.59)
 AC_INIT(dyntrace, 0.1, kbyanc@posi.net)
@@ -18,6 +18,7 @@ AC_PATH_PROGS(XSLTPROC, xsltproc)
 
 # Checks for libraries.
 AM_PATH_XML2(2.6.13, , AC_MSG_ERROR(libxml2 must be installed))
+AC_CHECK_LIB(pmc, pmc_attach)
 
 # Checks for header files.
 AC_HEADER_STDC
