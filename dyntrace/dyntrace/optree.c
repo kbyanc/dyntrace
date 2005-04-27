@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004 Kelly Yancey
+ * Copyright (c) 2004,2005 Kelly Yancey
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/optree.c,v 1.14 2004/12/27 10:31:35 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/optree.c,v 1.15 2005/04/27 04:32:14 kbyanc Exp $
  */
 
 #include <libxml/xmlreader.h>
@@ -356,11 +356,16 @@ optree_update(target_t targ, region_t region, vm_offset_t pc, uint cycles)
 	}
 
 	c->n++;
-	c->cycles_total += cycles;
-	if (cycles < c->cycles_min)
-		c->cycles_min = cycles;
-	else if (cycles > c->cycles_max)
-		c->cycles_max = cycles;
+	if (c->n == 1) {
+		c->cycles_total = c->cycles_min = c->cycles_max = cycles;
+	}
+	else {
+		c->cycles_total += cycles;
+		if (cycles < c->cycles_min)
+			c->cycles_min = cycles;
+		else if (cycles > c->cycles_max)
+			c->cycles_max = cycles;
+	}
 
 	/*
 	 * Warn about instructions which match the default opcode.
@@ -575,7 +580,7 @@ optree_print_node(struct radix_node *rn, void *arg)
 		snprintf(buffer, sizeof(buffer), "%u", c->cycles_min);
 		xmlTextWriterWriteAttribute(writer, "min", buffer);
 
-		snprintf(buffer, sizeof(buffer), "%u", c->cycles_min);
+		snprintf(buffer, sizeof(buffer), "%u", c->cycles_max);
 		xmlTextWriterWriteAttribute(writer, "max", buffer);
 
 		xmlTextWriterEndElement(writer /* "opcount" */);
