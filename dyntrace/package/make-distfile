@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $kbyanc: dyntrace/package/make-distfile,v 1.3 2005/04/27 02:23:04 kbyanc Exp $
+# $kbyanc: dyntrace/package/make-distfile,v 1.4 2005/05/17 03:02:28 kbyanc Exp $
 
 PACKAGE=dyntrace
 
@@ -8,7 +8,7 @@ WORKDIR=`mktemp -d -t distfile` || exit 1
 
 DATESTR=`date '+%Y%m%d'`
 NEWDISTFILE=${PACKAGE}-${DATESTR}.tar.gz
-OLDDISTFILE=`ls -1 ${PACKAGE}*.tar.gz | tail -1`
+OLDDISTFILE=`ls -1 ${PACKAGE}*.tar.gz 2>/dev/null | tail -1`
 
 if [ -r CVS/Entries ]; then
 	CVSROOT=`cat CVS/Root`
