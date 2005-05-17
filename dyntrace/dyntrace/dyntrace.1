@@ -22,7 +22,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\" 
-.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.4 2004/12/23 02:31:32 kbyanc Exp $
+.\" $kbyanc: dyntrace/dyntrace/dyntrace.1,v 1.5 2005/05/17 03:23:11 kbyanc Exp $
 .\"
 .lg 0
 .Dd December 12, 2004
@@ -261,13 +261,13 @@ of FreeBSD 4.0 and greater.
 Region differentiation is only available if
 .Xr procfs 5
 is mounted and accessable to the user.
-Instruction timing is implemented on FreeBSD 5.4 and later via the
+Instruction timing is implemented on FreeBSD 6.0 and later via the
 .Xr pmc 4
 API.
 The
 .Xr pmc 4
 API is only available if the kernel has been compiled with the
-.Cd PMC_HOOKS
+.Cd HWPMC_HOOKS
 option and the pmc module is loaded into the kernel.
 .Pp
 Note: versions of FreeBSD released prior to December 12th, 2004 have a
