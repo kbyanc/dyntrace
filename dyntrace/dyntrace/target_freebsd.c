@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004 Kelly Yancey
+ * Copyright (c) 2004,2005 Kelly Yancey
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.9 2005/04/27 02:53:50 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.10 2005/05/17 00:34:55 kbyanc Exp $
  */
 
 #include "config.h"
@@ -45,9 +45,6 @@
 
 #if HAVE_LIBPMC
 #include <pmc.h>
-#if __i386__ || __amd64__
-#include <machine/cpufunc.h>		/* for rdpmc() */
-#endif
 #endif
 
 #include <machine/reg.h>
@@ -65,7 +62,6 @@ struct target_state {
 
 #if HAVE_LIBPMC
 	pmc_id_t	 pmc;		/* handle for PMC for cycle counts. */
-	uint32_t	 pmc_regnum;	/* x86 MSR number. */
 	pmc_value_t	 cycles;	/* cycle counter. */
 #endif
 
@@ -207,16 +203,6 @@ target_new(pid_t pid, ptstate_t pts, char *procname)
 			fatal(EX_OSERR, "pmc_attach: %m");
 		if (pmc_rw(targ->pmc, 0, &targ->cycles) < 0)
 			fatal(EX_OSERR, "pmc_rw: %m");
-#if __i386__ || __amd64__
-		/*
-		 * On the x86 line of chips (Pentium and later) we can read
-		 * the performance counter from userland using the rdpmc
-		 * instruction, eliminating a context switch.  We just need
-		 * to know which register our performance counter is in...
-		 */
-		if (pmc_x86_get_msr(targ->pmc, &targ->pmc_regnum) < 0)
-			fatal(EX_OSERR, "pmc_x86_get_msr: %m");
-#endif
 		if (pmc_start(targ->pmc) < 0)
 			fatal(EX_OSERR, "pmc_start: %m");
 	}
@@ -375,12 +361,8 @@ target_get_cycles(target_t targ)
 	if (pmc_avail) {
 		pmc_value_t cycles_prev = targ->cycles;
 
-#if __i386__ || __amd64__
-		targ->cycles = rdpmc(targ->pmc_regnum);
-#else
 		if (pmc_read(targ->pmc, &targ->cycles) < 0)
 			fatal(EX_OSERR, "pmc_read: %m");
-#endif
 		assert(targ->cycles >= cycles_prev);
 		return (targ->cycles - cycles_prev);
 	}
