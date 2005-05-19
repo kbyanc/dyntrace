@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.10 2005/05/17 00:34:55 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.11 2005/05/19 21:58:31 kbyanc Exp $
  */
 
 #include "config.h"
@@ -103,7 +103,7 @@ target_init(void)
 			fatal(EX_OSERR, "pmc_cpuinfo: %m");
 
 		for (i = 0; i < cpuinfo->pm_nclass; i++) {
-			pmclass = cpuinfo->pm_classes[i];
+			pmclass = cpuinfo->pm_classes[i].pm_class;
 
 			if (pmclass == PMC_CLASS_P4) {
 				/* Intel Pentium 4 */
