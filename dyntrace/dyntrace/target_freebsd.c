@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.11 2005/05/19 21:58:31 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/target_freebsd.c,v 1.12 2006/05/10 03:22:09 kbyanc Exp $
  */
 
 #include "config.h"
@@ -95,7 +95,11 @@ target_init(void)
 
 #if HAVE_LIBPMC
 	if (pmc_init() >= 0) {
+#if PMC_VERSION < 0x01020003
 		const struct pmc_op_getcpuinfo *cpuinfo;
+#else
+		const struct pmc_cpuinfo *cpuinfo;
+#endif
 		enum pmc_class pmclass;
 		uint i;
 
