@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004 Kelly Yancey
+ * Copyright (c) 2004,2006 Kelly Yancey
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * 
- * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.7 2004/12/27 04:31:54 kbyanc Exp $
+ * $kbyanc: dyntrace/dyntrace/procfs_freebsd.c,v 1.8 2006/05/10 03:25:26 kbyanc Exp $
  */
 
 #include <sys/param.h>
@@ -327,8 +327,18 @@ procfs_opennode(const char *procfs, pid_t pid, const char *node)
 bool
 procfs_mount(const char *path)
 {
+	int bogus;
 
-	if (mount("procfs", path, MNT_RDONLY|MNT_NOEXEC|MNT_NOSUID, NULL) < 0) {
+	/*
+	 * FreeBSD 6.0 and 6.1 require the fourth argument to the mount(2)
+	 * system call, data, to be non-NULL even if the mounted filesystem
+	 * does not use the argument.  All other versions do not impose this
+	 * restriction (nor is the restriction documented in the man page
+	 * on the versions that do).  Workaround the bug by passing a
+	 * bogus non-NULL pointer as the data argument.
+	 */
+	if (mount("procfs", path, MNT_RDONLY|MNT_NOEXEC|MNT_NOSUID,
+		  &bogus) < 0) {
 		warn("unable to mount procfs on %s: %m", path);
 		return false;
 	}
