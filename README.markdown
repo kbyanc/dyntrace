@@ -1,4 +1,3 @@
-# $kbyanc: dyntrace/README,v 1.1 2005/05/17 02:42:09 kbyanc Exp $
 
 OVERVIEW
 ==========
@@ -19,7 +18,7 @@ associated tools:
 	libxslt		1.1.14			textproc/libxslt
 	perl5		5.8.0			lang/perl5.8
 
-  The following additional packages are required to build a distfiles:
+  The following additional packages are required to build distfiles:
 
 	Package		Minimum Version		FreeBSD Port
 	----------------------------------------------------
@@ -34,7 +33,7 @@ ready-to-distribute tar-ball in the current directory.
 AUTHORS
 =========
 
-	Kelly Yancey <kbyanc@posi.net>, <kbyanc@FreeBSD.org>
+	Kelly Yancey <kbyanc@gmail.com>
 
   Please send any bug reports, patches, etc. to Kelly Yancey at one of the
 e-mail addresses listed above.
