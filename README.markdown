@@ -5,6 +5,14 @@ OVERVIEW
   Dyntrace is an instruction-level dynamic trace tool primarily intended
 to aid in workload characterization of processor-bound programs.
 
+DOCUMENTATION
+===============
+
+  Primary documentation is located in the doc/ subdirectory.
+
+  - doc/Report.doc - Detailed report of the function and operation of
+                     the dyntrace tool.
+  - doc/User's Manual.pdf - Pre-rendered man page for the dyntrace tool.
 
 DEPENDENCIES
 ==============
@@ -30,10 +38,3 @@ subdirectory.  It will checkout the latest sources from CVS, build the
 configure script and Makefiles, and tar them all up into a
 ready-to-distribute tar-ball in the current directory.
 
-AUTHORS
-=========
-
-	Kelly Yancey <kbyanc@gmail.com>
-
-  Please send any bug reports, patches, etc. to Kelly Yancey at one of the
-e-mail addresses listed above.

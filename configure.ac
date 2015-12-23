@@ -4,7 +4,7 @@
 # $kbyanc: dyntrace/configure.ac,v 1.3 2005/04/27 02:53:46 kbyanc Exp $
 
 AC_PREREQ(2.59)
-AC_INIT(dyntrace, 0.1, kbyanc@posi.net)
+AC_INIT(dyntrace, 0.1, kbyanc@gmail.com)
 AM_INIT_AUTOMAKE
 
 AC_CONFIG_SRCDIR([dyntrace/main.c])
